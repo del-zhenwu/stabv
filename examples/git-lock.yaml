@@ -1,0 +1,28 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: git-lock
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - "setTimeout(() => {}, 400);"
+  fixture: mini-js
+  git: true
+  timeout: 8s
+  faults:
+    - type: git
+      action: lock
+      at: 0ms
+      duration: 2s
+    - type: git
+      action: conflict
+      at: 50ms
+      path: README.md
+  assertions:
+    - git_lock_absent
+    - file_contains:README.md:<<<<<<< HEAD
+    - fault_injected:git.lock
+    - fault_injected:git.conflict

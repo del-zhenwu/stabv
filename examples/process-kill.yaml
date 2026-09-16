@@ -1,0 +1,20 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: process-kill
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - "setTimeout(() => {}, 20000);"
+  timeout: 8s
+  faults:
+    - type: process
+      action: kill
+      at: 200ms
+  assertions:
+    - exit_nonzero
+    - no_orphan_process
+    - fault_injected:process.kill

@@ -1,0 +1,27 @@
+# Make the file under patch unwritable while Codex is editing it.
+# Finds: crash on EACCES, silent skip, leftover processes. Windows maps to readonly.
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: codex-chmod
+spec:
+  target:
+    adapter: codex
+    prompt: "Fix src/sum.js so `node --test` passes. Do not change the tests. Keep working until the tests pass."
+    sandbox: workspace-write
+    ephemeral: true
+    json: true
+    bypassApprovals: true
+  fixture: broken-sum
+  timeout: 60s
+  faults:
+    - type: file
+      action: chmod
+      at: 5s
+      path: src/sum.js
+      mode: "000"
+  assertions:
+    - fault_injected:file.chmod
+    - no_orphan_process
+    - git_state_consistent
+    - no_duplicate_tool_side_effect

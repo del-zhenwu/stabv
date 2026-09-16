@@ -1,0 +1,52 @@
+# Burst of external writes against the same path (IDE-like event storm, without an IDE).
+# Finds: lost updates, duplicate patches, watcher loops.
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: codex-file-storm
+spec:
+  target:
+    adapter: codex
+    prompt: "Fix src/sum.js so `node --test` passes. Do not change the tests. Keep working until the tests pass."
+    sandbox: workspace-write
+    ephemeral: true
+    json: true
+    bypassApprovals: true
+  fixture: broken-sum
+  timeout: 60s
+  faults:
+    - type: file
+      action: edit
+      at: 3s
+      path: src/sum.js
+      content: "export function add(a, b) {\n  return 0;\n}\n"
+    - type: file
+      action: edit
+      at: 3080ms
+      path: src/sum.js
+      content: "export function add(a, b) {\n  return a;\n}\n"
+    - type: file
+      action: edit
+      at: 3160ms
+      path: src/sum.js
+      content: "export function add(a, b) {\n  return b;\n}\n"
+    - type: file
+      action: edit
+      at: 3240ms
+      path: src/sum.js
+      content: "export function add(a, b) {\n  return 1;\n}\n"
+    - type: file
+      action: edit
+      at: 3320ms
+      path: src/sum.js
+      content: "export function add(a, b) {\n  return -1;\n}\n"
+    - type: file
+      action: edit
+      at: 3400ms
+      path: src/sum.js
+      content: "export function add(a, b) {\n  return 0;\n}\n"
+  assertions:
+    - fault_injected:file.edit
+    - no_orphan_process
+    - git_state_consistent
+    - no_duplicate_tool_side_effect

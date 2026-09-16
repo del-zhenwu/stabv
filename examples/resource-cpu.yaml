@@ -1,0 +1,22 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: resource-cpu
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - "setTimeout(() => {}, 800);"
+  timeout: 10s
+  faults:
+    - type: resource
+      action: cpu
+      at: 50ms
+      duration: 300ms
+      threads: 2
+  assertions:
+    - exit_zero
+    - fault_injected:resource.cpu
+    - no_orphan_process

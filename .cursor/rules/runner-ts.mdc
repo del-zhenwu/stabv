@@ -1,0 +1,14 @@
+---
+description: TypeScript control-plane conventions for the runner
+globs: packages/runner/**/*.ts
+alwaysApply: false
+---
+
+# Runner TypeScript
+
+- Node `--experimental-strip-types`: no `constructor(private x)`, no mixed `??` / `||` without parentheses.
+- Adapters return `{ executable, args, env }`. Discover Windows binaries via `PATHEXT` / `.exe` / `.cmd`.
+- Process kill/pause/lock/CPU/mem go through `HelperClient`, never `kill(-pid)` or `ps`.
+- Paths: `assertInsideWorkspace`. Recoverable faults must restore in `finally`.
+- New chaos: types in `spec.ts`, inject in `faults.ts`, YAML under `examples/`, test in `packages/runner/test`. Prefer `generic-cli` + `node` unless the example is real Codex.
+- Mark missing helper capabilities `degraded` / `unsupported`. `target.pty: true` uses helper `pty-spawn`; if `caps` lacks `pty`, fall back to pipes and mark degraded.

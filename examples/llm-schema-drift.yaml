@@ -1,0 +1,27 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: llm-schema-drift
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - --input-type=module
+      - -e
+      - |
+        const url = process.env.OPENAI_BASE_URL + "/chat/completions";
+        const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+        const body = await res.text();
+        console.log(body);
+        process.exit(body.includes("unexpected_field") ? 0 : 1);
+  timeout: 8s
+  faults:
+    - type: llm
+      action: schema_drift
+      at: 0ms
+  assertions:
+    - exit_zero
+    - type: output_contains
+      text: unexpected_field
+    - fault_injected:llm.schema_drift

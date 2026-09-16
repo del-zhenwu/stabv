@@ -1,0 +1,23 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: file-lock
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - "setTimeout(() => console.log('done'), 500);"
+  timeout: 8s
+  faults:
+    - type: file
+      action: lock
+      at: 0ms
+      duration: 300ms
+      path: locked.txt
+  assertions:
+    - exit_zero
+    - file_exists:locked.txt
+    - fault_injected:file.lock
+    - application_eventually_responsive

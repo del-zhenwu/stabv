@@ -1,0 +1,30 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: resource-port
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - --input-type=module
+      - -e
+      - |
+        import { createServer } from "node:net";
+        const server = createServer();
+        server.once("error", (err) => {
+          console.log(err.code || err.message);
+          process.exit(err.code === "EADDRINUSE" ? 0 : 1);
+        });
+        server.listen(9876, "127.0.0.1");
+  timeout: 8s
+  faults:
+    - type: resource
+      action: port
+      at: 0ms
+      duration: 2s
+      port: 9876
+  assertions:
+    - exit_zero
+    - output_contains:EADDRINUSE
+    - fault_injected:resource.port

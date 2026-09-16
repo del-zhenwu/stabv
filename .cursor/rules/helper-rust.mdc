@@ -1,0 +1,13 @@
+---
+description: Rust helper must stay OS primitives; Windows uses native APIs
+globs: helper/**/*.rs
+alwaysApply: false
+---
+
+# agentchaos-helper
+
+JSON stdout only (`{"ok":true,...}` / `{"ok":false,"error":"..."}`). No YAML, Codex argv, or assertions.
+
+- Unix: `ps` + signals. Windows 10+: Job Object, Toolhelp32, `SuspendThread` / `ResumeThread`, `LockFileEx`. Never `wmic` or `taskkill`.
+- New commands: implement Unix **and** Windows, or `bail!("unsupported")`. Register in `caps`.
+- Swift/COM/UI Automation stay out until the desktop-bridge roadmap step. PTY/ConPTY is `pty-spawn` (handshake JSON on stderr, then raw terminal bytes on stdout).

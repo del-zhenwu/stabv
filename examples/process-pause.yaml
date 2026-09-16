@@ -1,0 +1,22 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: process-pause
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - "const fs=require('fs'); let i=0; const t=setInterval(()=>{fs.appendFileSync('ticks.txt', 'tick '+i+'\\n'); i++; if(i>=30) clearInterval(t);}, 100);"
+  timeout: 8s
+  faults:
+    - type: process
+      action: pause
+      at: 250ms
+      duration: 400ms
+  assertions:
+    - exit_zero
+    - file_exists:ticks.txt
+    - fault_injected:process.pause
+    - no_orphan_process

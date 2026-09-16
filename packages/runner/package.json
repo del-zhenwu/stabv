@@ -1,0 +1,14 @@
+{
+  "name": "@agentchaos/runner",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "cli": "node --experimental-strip-types src/cli.ts"
+  },
+  "dependencies": {
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.1"
+  }
+}

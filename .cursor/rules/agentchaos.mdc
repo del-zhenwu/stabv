@@ -1,0 +1,27 @@
+---
+description: AgentChaos architecture, Windows support, roadmap order, and product boundaries
+alwaysApply: true
+---
+
+# AgentChaos
+
+macOS **and Windows 10+** are first-class. Same YAML. Never document or implement Unix-only as the default path.
+
+面向用户的文档用中文：`README.md`、`docs/*.md`（含用户手册）。写产品说明，不要把对话问答、约束原文或参考产品名贴进文档。
+
+- Windows setup: `scripts\setup.cmd`. Entry: `.\agentchaos.cmd`.
+- Unix setup: `./scripts/setup.sh`. Entry: `./agentchaos`.
+- README 安装/使用：Windows 与 macOS 各三行、互不注释。不要写成一行 Unix 后面跟 `# Windows: …`。
+- Optional: `npx agentchaos`. Primary path is the root wrappers.
+- Helper: Job Object, `SuspendThread`, `LockFileEx` on Windows; do not shell out to `wmic` / `taskkill`.
+- Specs: `executable` + `args`. POSIX `command:` breaks on Windows.
+
+**Layers:** TypeScript owns YAML, adapters, workflow, proxy, events, assertions, CLI/viewer. Rust helper owns process trees, PTY/ConPTY, Job Objects, native APIs, resource pressure, IPC. Do not mix.
+
+**UX:** CLI / CI / YAML + `.\agentchaos.cmd view` / `./agentchaos view`. Do not add a desktop app as the primary interface.
+
+**Experiments:** Product YAML (`examples/codex-*.yaml`, `examples/zcode-*.yaml`) must drive a real agent on a failing fixture (edit code, run tests, touch Git). Do not use “wait N seconds” as the workload. Node `-e` stubs belong in control-plane tests and `*-fast.yaml` only. Success is invariants (orphans, git/workspace, duplicate tool side effects, session resume)—not model quality, not “the process came back”. Distinguish process crash vs stuck UI vs semantic divergence. Fault recover ≠ task recover ≠ side-effect recover.
+
+**Do not:** replace SWE-bench; put experiment orchestration in the helper; fault a real home directory without explicit opt-in.
+
+**Build order** (no dates): (1) 非 Codex 完整 CLI adapter（PTY/ConPTY 已接入） (2) MCP/events/approval faults (3) disk/worktree/metrics/compare (4) helper release + desktop bridges (5) endurance / live viewer. Dashboard/CI/npm 见 `docs/design.md`。能力缺口：`docs/roadmap.md`。

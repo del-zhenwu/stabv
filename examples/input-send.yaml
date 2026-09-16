@@ -1,0 +1,34 @@
+# Inject stdin without a PTY. Finds: dropped input, hang waiting for EOF.
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: input-send
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - --input-type=module
+      - -e
+      - |
+        process.stdin.setEncoding("utf8");
+        let buf = "";
+        process.stdin.on("data", (chunk) => { buf += chunk; });
+        process.stdin.on("end", () => {
+          process.stdout.write("got:" + buf);
+          process.exit(buf.includes("ping") ? 0 : 1);
+        });
+  timeout: 8s
+  faults:
+    - type: input
+      action: send
+      at: 50ms
+      text: "ping\n"
+    - type: input
+      action: eof
+      at: 120ms
+  assertions:
+    - exit_zero
+    - output_contains:got:ping
+    - fault_injected:input.send
+    - fault_injected:input.eof

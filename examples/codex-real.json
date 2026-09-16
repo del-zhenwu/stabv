@@ -1,0 +1,15 @@
+# Keep the previous JSON shape working for one-off Codex runs.
+{
+  "apiVersion": "agentchaos.dev/v1alpha1",
+  "kind": "Experiment",
+  "metadata": { "name": "codex-real-json" },
+  "target": {
+    "adapter": "codex",
+    "executable": "/Applications/ChatGPT.app/Contents/Resources/codex",
+    "args": ["exec", "--skip-git-repo-check", "--ephemeral", "--json", "-s", "read-only", "Read the directory and report the file names. Do not modify files."]
+  },
+  "workspace": ".agentchaos-runs",
+  "timeout": "90s",
+  "faults": [],
+  "assertions": ["exit_zero", "not_timed_out"]
+}

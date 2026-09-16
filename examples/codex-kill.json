@@ -1,0 +1,9 @@
+{
+  "target": {
+    "executable": "/Applications/ChatGPT.app/Contents/Resources/codex",
+    "args": ["exec", "--skip-git-repo-check", "--ephemeral", "--json", "-s", "read-only", "Inspect this directory, then wait 30 seconds before responding."]
+  },
+  "workspace": ".agentchaos-runs",
+  "faults": [{ "type": "process_kill", "at": 0.1 }],
+  "assertions": ["exit_nonzero"]
+}

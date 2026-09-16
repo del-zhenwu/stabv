@@ -1,0 +1,23 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: kill-and-resume
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - "setTimeout(() => console.log('alive'), 800);"
+  timeout: 5s
+  recovery:
+    restart: true
+  faults:
+    - type: process
+      action: kill
+      at: 150ms
+  assertions:
+    - exit_zero
+    - fault_injected:process.kill
+    - no_orphan_process
+    - application_eventually_responsive

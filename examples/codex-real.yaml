@@ -1,0 +1,17 @@
+# Run only against a disposable workspace. Requires Codex CLI and a logged-in session.
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: codex-real
+spec:
+  target:
+    adapter: codex
+    prompt: "请检查仓库，列出文件名；不要修改文件。"
+    sandbox: read-only
+    ephemeral: true
+    json: true
+  fixture: mini-js
+  timeout: 90s
+  assertions:
+    - exit_zero
+    - not_timed_out

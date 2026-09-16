@@ -1,0 +1,16 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: ChaosProfile
+metadata:
+  name: file-edit
+spec:
+  faults:
+    - type: file
+      action: edit
+      at: 80ms
+      path: external.txt
+      content: "external edit\n"
+  assertions:
+    - exit_zero
+    - file_exists:external.txt
+    - file_contains:external.txt:external edit
+    - fault_injected:file.edit

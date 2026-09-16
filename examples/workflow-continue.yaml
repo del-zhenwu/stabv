@@ -1,0 +1,10 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Workflow
+metadata:
+  name: continue-after-fail
+spec:
+  failFast: false
+  tasks:
+    - serial:
+        - process-kill.yaml
+        - file-lock.yaml

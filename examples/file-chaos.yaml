@@ -1,0 +1,35 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: file-chaos
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - "setTimeout(() => {}, 600);"
+  fixture: mini-js
+  timeout: 8s
+  faults:
+    - type: file
+      action: edit
+      at: 80ms
+      path: src/index.js
+      content: "throw new Error('external mutation')\n"
+    - type: file
+      action: delete
+      at: 160ms
+      path: README.md
+    - type: file
+      action: chmod
+      at: 240ms
+      path: package.json
+      mode: "000"
+  assertions:
+    - exit_zero
+    - file_absent:README.md
+    - file_contains:src/index.js:external mutation
+    - fault_injected:file.edit
+    - fault_injected:file.delete
+    - fault_injected:file.chmod

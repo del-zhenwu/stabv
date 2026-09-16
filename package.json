@@ -1,0 +1,21 @@
+{
+  "name": "agentchaos",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agentchaos": "./bin/agentchaos.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "setup": "node --experimental-strip-types packages/runner/src/cli.ts setup",
+    "agentchaos": "node --experimental-strip-types packages/runner/src/cli.ts",
+    "view": "node --experimental-strip-types packages/runner/src/cli.ts view",
+    "build:helper": "cargo build -p agentchaos-helper",
+    "postinstall": "node scripts/postinstall.mjs",
+    "test": "npm run build:helper && node --experimental-strip-types --test packages/runner/test/*.test.ts",
+    "test:helper": "cargo test -p agentchaos-helper"
+  }
+}

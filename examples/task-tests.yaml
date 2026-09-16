@@ -1,0 +1,28 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: task-tests
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - "console.log('agent finished');"
+  fixture: mini-js
+  timeout: 8s
+  verify:
+    executable: node
+    args:
+      - -e
+      - "require('fs').accessSync('README.md'); require('fs').accessSync('src/index.js');"
+  expected:
+    - path: README.md
+      contains: disposable
+    - path: src/index.js
+  assertions:
+    - exit_zero
+    - task_tests_pass
+    - workspace_matches_expected
+    - git_state_consistent
+  git: true

@@ -1,0 +1,23 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: smoke-file-edit
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - "console.log('agent started'); setTimeout(() => console.log('agent finished'), 400);"
+  timeout: 10s
+  faults:
+    - type: file
+      action: edit
+      at: 100ms
+      path: external.txt
+      content: "external edit\n"
+  assertions:
+    - exit_zero
+    - file_exists:external.txt
+    - file_contains:external.txt:external edit
+    - not_timed_out

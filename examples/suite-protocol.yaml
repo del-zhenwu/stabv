@@ -1,0 +1,16 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Suite
+metadata:
+  name: protocol-faults
+spec:
+  repeat: 1
+  experiments:
+    - llm-429.yaml
+    - llm-401.yaml
+    - llm-truncate.yaml
+    - llm-timeout.yaml
+    - llm-duplicate.yaml
+    - llm-malformed.yaml
+    - llm-schema-drift.yaml
+    - file-large.yaml
+    - resource-port.yaml

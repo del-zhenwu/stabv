@@ -1,0 +1,23 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: git-switch-branch
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - "setTimeout(() => {}, 300);"
+  fixture: mini-js
+  git: true
+  timeout: 8s
+  faults:
+    - type: git
+      action: switch-branch
+      at: 50ms
+      branch: agentchaos-chaos
+  assertions:
+    - exit_zero
+    - fault_injected:git.switch-branch
+    - git_state_consistent

@@ -1,0 +1,28 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: llm-401
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - --input-type=module
+      - -e
+      - |
+        const url = process.env.OPENAI_BASE_URL + "/chat/completions";
+        const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+        const body = await res.text();
+        console.log("status", res.status);
+        console.log(body);
+        process.exit(res.status === 401 ? 0 : 1);
+  timeout: 8s
+  faults:
+    - type: llm
+      action: 401
+      at: 0ms
+      duration: 5s
+  assertions:
+    - exit_zero
+    - output_contains:status 401
+    - fault_injected:llm.401

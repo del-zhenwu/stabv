@@ -1,0 +1,24 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: file-large
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - "setTimeout(() => {}, 400);"
+  fixture: mini-js
+  timeout: 8s
+  faults:
+    - type: file
+      action: edit
+      at: 50ms
+      path: src/blob.bin
+      sizeBytes: 65536
+  assertions:
+    - exit_zero
+    - file_exists:src/blob.bin
+    - file_contains:src/blob.bin:AAAAAAAA
+    - fault_injected:file.edit

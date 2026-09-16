@@ -1,0 +1,8 @@
+{
+  "name": "broken-sum",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}

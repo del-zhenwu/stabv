@@ -1,0 +1,31 @@
+# Read stdin on a real PTY and echo it. Finds: TTY detection, lost keystrokes, helper relay bugs.
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: pty-echo
+spec:
+  target:
+    adapter: generic-cli
+    pty: true
+    executable: node
+    args:
+      - --input-type=module
+      - -e
+      - |
+        process.stdout.write("tty=" + String(Boolean(process.stdin.isTTY)) + "\n");
+        process.stdin.setEncoding("utf8");
+        process.stdin.on("data", (chunk) => {
+          process.stdout.write("got:" + String(chunk).replace(/\r/g, ""));
+          process.exit(0);
+        });
+  timeout: 8s
+  faults:
+    - type: input
+      action: send
+      at: 80ms
+      text: "hello\n"
+  assertions:
+    - exit_zero
+    - output_contains:tty=true
+    - output_contains:got:hello
+    - fault_injected:input.send
