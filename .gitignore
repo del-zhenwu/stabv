@@ -1,5 +1,6 @@
 /target
 /helper/target
+/helper/bin
 /node_modules
 /.agentchaos-runs
 /.agentchaos
