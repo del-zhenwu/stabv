@@ -1,0 +1,13 @@
+# 谁 + 打什么。不必再列 workloads × profiles。
+apiVersion: agentchaos.dev/v1alpha1
+kind: Suite
+metadata:
+  name: zcode
+spec:
+  repeat: 1
+  agent: zcode
+  inject:
+    - file/edit
+    - process/kill
+    - llm
+    - auto

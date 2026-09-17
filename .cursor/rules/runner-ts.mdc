@@ -8,7 +8,16 @@ alwaysApply: false
 
 - Node `--experimental-strip-types`: no `constructor(private x)`, no mixed `??` / `||` without parentheses.
 - Adapters return `{ executable, args, env }`. Discover Windows binaries via `PATHEXT` / `.exe` / `.cmd`.
+  - All named adapters register in `AGENT_REGISTRY` via `AgentDescriptor`.
+  - Executable resolution hierarchy: explicit `target.executable` > `XXX_BIN` env var > system `PATH` > global package manager bin.
+  - Never hardcode desktop bundle internal paths (e.g. `/Applications/*.app/Contents/Resources/...`) directly into execution logic.
+- Native events are classified in `native-events.ts` via strongly-typed Tagged Union matching per protocol. Never use string concatenation haystacks or loose regexes (`/approval/`, `/item\.completed/`).
+- Dual-track chaos: Physical faults go through `HelperClient` or proxy; cognitive faults (`rule.*`, `context.*`) mutate LLM request payloads in `proxy.ts`.
+- `LlmProxy` transparently forwards to upstream (`AGENTCHAOS_LLM_UPSTREAM`) when no faults are active, intercepting on fault window.
+- Experiment `mode: rules` (default) only runs `faults`. `mode: auto` requires `AGENTCHAOS_LLM_API_KEY` and uses `pi-agent-core` with observe/strike/stop. Replay always becomes `rules`.
+- User YAML is `target.adapter` + `inject`. Default is `examples/zcode.yaml` (`zcode` + `DEFAULT_INJECT`). The runner expands kinds to `examples/profiles/<kind>/`. `workloads/` + `profiles/` are the catalog, not the primary UX. Reports show `agent × inject`. `probe/` is Node stubs only.
+- Omitted `assertions` default to the empirical chaos set for this experiment (timeout, orphans, git, duplicate tools, lost tool results, plus fault-specific checks). Auto/LLM never judge pass/fail.
 - Process kill/pause/lock/CPU/mem go through `HelperClient`, never `kill(-pid)` or `ps`.
 - Paths: `assertInsideWorkspace`. Recoverable faults must restore in `finally`.
-- New chaos: types in `spec.ts`, inject in `faults.ts`, YAML under `examples/`, test in `packages/runner/test`. Prefer `generic-cli` + `node` unless the example is real Codex.
+- New chaos: types in `spec.ts`, inject in `faults.ts`, YAML under `examples/profiles/` or `examples/probe/`, test in `packages/runner/test`. Prefer `generic-cli` + `node` unless the example is a real agent workload.
 - Mark missing helper capabilities `degraded` / `unsupported`. `target.pty: true` uses helper `pty-spawn`; if `caps` lacks `pty`, fall back to pipes and mark degraded.

@@ -1,0 +1,23 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: compaction-interrupt
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - |
+        const fs = require("fs");
+        fs.writeSync(1, JSON.stringify({ type: "compaction_started" }) + "\n");
+        setTimeout(() => {}, 20000);
+  timeout: 8s
+  faults:
+    - type: compaction
+      action: interrupt
+  assertions:
+    - exit_nonzero
+    - fault_injected:compaction.interrupt
+    - event_seen:compaction_started
+    - no_orphan_process

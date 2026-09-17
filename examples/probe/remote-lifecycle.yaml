@@ -1,0 +1,38 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: remote-lifecycle-demo
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - "-e"
+      - |
+        const http = require('http');
+        const acquireUrl = new URL(process.env.AGENTCHAOS_REMOTE_URL + '/v1/leases/acquire');
+        const req = http.request(acquireUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' } }, (res) => {
+          let body = '';
+          res.on('data', (d) => body += d);
+          res.on('end', () => {
+            const lease = JSON.parse(body);
+            // Send heartbeat to remote coordinator
+            const hbUrl = new URL(process.env.AGENTCHAOS_REMOTE_URL + '/v1/leases/heartbeat');
+            const hbReq = http.request(hbUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' } }, (hbRes) => {
+              if (hbRes.statusCode === 200) process.exit(0);
+              else process.exit(1);
+            });
+            hbReq.write(JSON.stringify({ leaseId: lease.leaseId, token: lease.token }));
+            hbReq.end();
+          });
+        });
+        req.write(JSON.stringify({ agentId: 'cloud-agent-runner' }));
+        req.end();
+  timeout: 5s
+  faults:
+    - type: remote
+      action: heartbeat_timeout
+      at: 1000ms
+  assertions:
+    - exit_zero
+    - remote_lease_valid

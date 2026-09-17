@@ -33,6 +33,7 @@ node --experimental-strip-types packages/runner/src/cli.ts setup
 if errorlevel 1 exit /b 1
 
 echo.
-echo Ready.
-echo   .\agentchaos.cmd run examples\codex-smoke.yaml
+echo Ready (contributor checkout).
+echo   Users install with: npm install -g agentchaos
+echo   .\agentchaos.cmd run examples\probe\codex-smoke.yaml
 echo   .\agentchaos.cmd view --open

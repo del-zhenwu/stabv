@@ -1,0 +1,27 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: resource-exhaustion-demo
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - "-e"
+      - |
+        setTimeout(() => process.exit(0), 250);
+  timeout: 5s
+  faults:
+    - type: resource
+      action: handle_exhaustion
+      limit: 128
+      duration: 100ms
+      at: 30ms
+    - type: resource
+      action: disk_exhaustion
+      mb: 2
+      duration: 100ms
+      at: 60ms
+  assertions:
+    - exit_zero
+    - resource_exhaustion_recovered

@@ -22,7 +22,8 @@ pub fn pid_alive(pid: u32) -> bool {
     }
     #[cfg(unix)]
     unsafe {
-        libc::kill(pid as i32, 0) == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+        libc::kill(pid as i32, 0) == 0
+            || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
     }
     #[cfg(windows)]
     {
@@ -76,7 +77,11 @@ pub fn descendants(root: u32, all: &[ProcessInfo]) -> Vec<ProcessInfo> {
     if let Some(self_proc) = all.iter().find(|p| p.pid == root) {
         out.push(self_proc.clone());
     } else {
-        out.push(ProcessInfo { pid: root, ppid: 0, command: String::new() });
+        out.push(ProcessInfo {
+            pid: root,
+            ppid: 0,
+            command: String::new(),
+        });
     }
     while let Some(pid) = q.pop_front() {
         for child in by_parent.get(&pid).into_iter().flatten() {
@@ -113,6 +118,17 @@ fn signal_pid(pid: u32, sig: i32) -> Result<()> {
         }
     }
     Ok(())
+}
+
+pub fn kill_process(pid: u32) -> Result<()> {
+    #[cfg(unix)]
+    {
+        signal_pid(pid, libc::SIGKILL)
+    }
+    #[cfg(windows)]
+    {
+        crate::win::kill_single(pid)
+    }
 }
 
 pub fn kill_tree(root: u32) -> Result<TreeSnapshot> {
@@ -185,10 +201,26 @@ mod tests {
     #[test]
     fn walk_descendants() {
         let all = vec![
-            ProcessInfo { pid: 10, ppid: 1, command: "root".into() },
-            ProcessInfo { pid: 11, ppid: 10, command: "child".into() },
-            ProcessInfo { pid: 12, ppid: 11, command: "grand".into() },
-            ProcessInfo { pid: 99, ppid: 1, command: "other".into() },
+            ProcessInfo {
+                pid: 10,
+                ppid: 1,
+                command: "root".into(),
+            },
+            ProcessInfo {
+                pid: 11,
+                ppid: 10,
+                command: "child".into(),
+            },
+            ProcessInfo {
+                pid: 12,
+                ppid: 11,
+                command: "grand".into(),
+            },
+            ProcessInfo {
+                pid: 99,
+                ppid: 1,
+                command: "other".into(),
+            },
         ];
         let tree = descendants(10, &all);
         let pids: Vec<u32> = tree.iter().map(|p| p.pid).collect();

@@ -1,0 +1,11 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: ChaosProfile
+metadata:
+  name: resource-disk
+spec:
+  faults:
+    - type: resource
+      action: disk
+      when: tool_started
+      at: 200ms
+      duration: 3s

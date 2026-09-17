@@ -1,0 +1,16 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: ChaosProfile
+metadata:
+  name: git-lock
+spec:
+  faults:
+    - type: git
+      action: lock
+      when: tool_started
+      at: 500ms
+      duration: 20s
+    - type: git
+      action: conflict
+      when: tool_started
+      at: 600ms
+      path: README.md

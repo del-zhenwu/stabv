@@ -1,0 +1,33 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: llm-schedule-burst
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - --input-type=module
+      - -e
+      - |
+        const url = process.env.OPENAI_BASE_URL + "/chat/completions";
+        const statuses = [];
+        for (let i = 0; i < 4; i++) {
+          const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+          statuses.push(res.status);
+        }
+        console.log(statuses.join(","));
+        process.exit(statuses[0] === 429 && statuses[1] === 429 && statuses[2] === 200 && statuses[3] === 200 ? 0 : 1);
+  timeout: 8s
+  faults:
+    - type: llm
+      action: 429
+      schedule: burst
+      burst: 2
+      at: 0ms
+      duration: 5s
+  assertions:
+    - exit_zero
+    - output_contains:429,429,200,200
+    - fault_injected:llm.429
+    - llm_triggered

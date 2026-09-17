@@ -23,3 +23,46 @@ jobs:
         run: cargo build -p agentchaos-helper
       - name: Control plane tests
         run: npm install && npm test
+      - name: Pack
+        run: npm run pack
+      - name: Install packed tarball
+        shell: bash
+        run: |
+          set -euo pipefail
+          tgz=$(ls agentchaos-*.tgz | head -n 1)
+          prefix="${RUNNER_TEMP}/ac-prefix"
+          npm install -g --prefix "$prefix" "./$tgz"
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            bin="$prefix/agentchaos.cmd"
+          else
+            bin="$prefix/bin/agentchaos"
+          fi
+          test -e "$bin"
+          echo "AGENTCHAOS_BIN=$bin" >> "$GITHUB_ENV"
+          "$bin" validate examples/zcode.yaml
+
+  e2e:
+    needs: test
+    if: ${{ secrets.ZCODE_API_KEY != '' }}
+    runs-on: ${{ vars.E2E_RUNNER || 'macos-latest' }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Pack
+        run: npm install && npm run pack
+      - name: Install packed tarball
+        run: |
+          set -euo pipefail
+          tgz=$(ls agentchaos-*.tgz | head -n 1)
+          prefix="${RUNNER_TEMP}/ac-prefix"
+          npm install -g --prefix "$prefix" "./$tgz"
+          echo "AGENTCHAOS_BIN=$prefix/bin/agentchaos" >> "$GITHUB_ENV"
+      - name: User-path e2e
+        env:
+          ZCODE_API_KEY: ${{ secrets.ZCODE_API_KEY }}
+          ZCODE_BASE_URL: ${{ secrets.ZCODE_BASE_URL }}
+          ZCODE_MODEL: ${{ secrets.ZCODE_MODEL }}
+        run: npm run test:e2e

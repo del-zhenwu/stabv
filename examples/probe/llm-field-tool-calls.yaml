@@ -1,0 +1,31 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: llm-field-tool-calls
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - --input-type=module
+      - -e
+      - |
+        const url = process.env.OPENAI_BASE_URL + "/chat/completions";
+        const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+        const body = await res.text();
+        console.log(body);
+        const parsed = JSON.parse(body);
+        const args = parsed.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments ?? "";
+        const content = parsed.choices?.[0]?.message?.content ?? "";
+        process.exit(content === "ok" && args.length > 0 && args.length < '{"path":"src/sum.js"}'.length ? 0 : 1);
+  timeout: 8s
+  faults:
+    - type: llm
+      action: truncate
+      field: tool_calls
+      at: 0ms
+      duration: 5s
+  assertions:
+    - exit_zero
+    - fault_injected:llm.truncate
+    - llm_triggered

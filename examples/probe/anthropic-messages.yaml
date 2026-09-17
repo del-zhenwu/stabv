@@ -1,0 +1,28 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: anthropic-messages-429
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - |
+        const url = (process.env.ANTHROPIC_BASE_URL || 'http://127.0.0.1:4000') + '/v1/messages';
+        fetch(url, {
+          method: 'POST',
+          headers: { 'x-api-key': 'test', 'content-type': 'application/json' },
+          body: JSON.stringify({ model: 'claude-3-5-sonnet', messages: [{ role: 'user', content: 'hello' }] })
+        }).then(r => {
+          console.log('anthropic status:', r.status);
+          process.exit(r.status === 429 ? 0 : 1);
+        });
+  timeout: 10s
+  faults:
+    - type: llm
+      action: "429"
+      at: 0ms
+  assertions:
+    - exit_zero
+    - output_contains: "anthropic status: 429"

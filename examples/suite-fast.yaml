@@ -1,9 +1,0 @@
-apiVersion: agentchaos.dev/v1alpha1
-kind: Suite
-metadata:
-  name: compose-contract
-spec:
-  repeat: 1
-  experiments:
-    - composed.yaml
-    - prompt-noise.yaml

@@ -1,0 +1,14 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Suite
+metadata:
+  name: reliability-smoke
+spec:
+  repeat: 1
+  experiments:
+    - ../probe/process-kill.yaml
+    - ../probe/file-lock.yaml
+    - ../probe/file-large.yaml
+    - ../probe/llm-429.yaml
+    - ../probe/llm-401.yaml
+    - ../probe/llm-schema-drift.yaml
+    - ../probe/task-tests.yaml

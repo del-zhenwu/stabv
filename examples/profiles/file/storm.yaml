@@ -1,0 +1,42 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: ChaosProfile
+metadata:
+  name: file-storm
+spec:
+  faults:
+    - type: file
+      action: edit
+      when: tool_started
+      at: 200ms
+      path: src/sum.js
+      content: "export function add(a, b) {\n  return 0;\n}\n"
+    - type: file
+      action: edit
+      when: tool_started
+      at: 280ms
+      path: src/sum.js
+      content: "export function add(a, b) {\n  return a;\n}\n"
+    - type: file
+      action: edit
+      when: tool_started
+      at: 360ms
+      path: src/sum.js
+      content: "export function add(a, b) {\n  return b;\n}\n"
+    - type: file
+      action: edit
+      when: tool_started
+      at: 440ms
+      path: src/sum.js
+      content: "export function add(a, b) {\n  return 1;\n}\n"
+    - type: file
+      action: edit
+      when: tool_started
+      at: 520ms
+      path: src/sum.js
+      content: "export function add(a, b) {\n  return -1;\n}\n"
+    - type: file
+      action: edit
+      when: tool_started
+      at: 600ms
+      path: src/sum.js
+      content: "export function add(a, b) {\n  return 0;\n}\n"

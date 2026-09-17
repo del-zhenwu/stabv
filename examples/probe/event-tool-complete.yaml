@@ -1,0 +1,20 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: event-tool-complete
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - |
+        const fs = require("fs");
+        fs.writeSync(1, JSON.stringify({ type: "item.started", item: { id: "call_1", type: "command_execution" } }) + "\n");
+        fs.writeSync(1, JSON.stringify({ type: "item.completed", item: { id: "call_1", type: "command_execution" } }) + "\n");
+  timeout: 8s
+  assertions:
+    - exit_zero
+    - event_seen:tool_started
+    - event_seen:tool_finished
+    - no_lost_tool_result

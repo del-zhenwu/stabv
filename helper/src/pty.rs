@@ -6,7 +6,11 @@ use serde_json::json;
 use std::io::Write;
 use std::path::Path;
 
-pub fn run_pty_spawn(cwd: Option<&Path>, extra_env: &[(String, String)], argv: &[String]) -> Result<i32> {
+pub fn run_pty_spawn(
+    cwd: Option<&Path>,
+    extra_env: &[(String, String)],
+    argv: &[String],
+) -> Result<i32> {
     if argv.is_empty() {
         bail!("pty-spawn requires an executable");
     }
@@ -106,7 +110,10 @@ mod unix {
             if libc::ioctl(slave_fd, libc::TIOCSCTTY as libc::c_ulong, 0) < 0 {
                 // Some environments refuse a controlling tty; still attach stdio.
             }
-            if libc::dup2(slave_fd, 0) < 0 || libc::dup2(slave_fd, 1) < 0 || libc::dup2(slave_fd, 2) < 0 {
+            if libc::dup2(slave_fd, 0) < 0
+                || libc::dup2(slave_fd, 1) < 0
+                || libc::dup2(slave_fd, 2) < 0
+            {
                 bail!("dup2 slave failed: {}", std::io::Error::last_os_error());
             }
             if slave_fd > 2 {
@@ -129,7 +136,11 @@ mod unix {
         unsafe {
             libc::execvp(exe.as_ptr(), ptrs.as_ptr());
         }
-        bail!("execvp {} failed: {}", argv[0], std::io::Error::last_os_error());
+        bail!(
+            "execvp {} failed: {}",
+            argv[0],
+            std::io::Error::last_os_error()
+        );
     }
 
     fn relay(master_fd: i32) -> Result<()> {
@@ -185,7 +196,8 @@ mod unix {
 mod tests {
     #[test]
     fn echo_through_pty_exits_zero() {
-        let code = super::run_pty_spawn(None, &[], &["/bin/echo".into(), "ok".into()]).expect("pty echo");
+        let code =
+            super::run_pty_spawn(None, &[], &["/bin/echo".into(), "ok".into()]).expect("pty echo");
         assert_eq!(code, 0);
     }
 }

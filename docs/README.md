@@ -1,12 +1,12 @@
 # 文档
 
-| 文档 | 读者 |
-| --- | --- |
-| [用户手册](./user-guide.md) | 跑实验、写 YAML、看报告 |
-| [对接 CLI](./cli-adapter.md) | 把新的 agent CLI 接到 runner |
-| [稳定性实验](./scenarios.md) | 少量真实场景（kill/resume、外部改文件、Git lock） |
-| [开发者手册](./developer-guide.md) | 改控制面 / helper、加故障 |
-| [AGENTS.md](../AGENTS.md) | Cursor / 协作者仓库约定（含 Windows 与实现顺序） |
-| [Roadmap](./roadmap.md) | 能力缺口（无时间点） |
-| [设计](./design.md) | 目标、原则、产品形态、边界 |
-| [技术架构](./technical.md) | 分层、实验契约、状态机 |
+- [用户手册](./user-guide.md)：安装、命令、YAML、故障与断言
+- [示例](../examples/README.md)：可运行的实验文件
+- [场景表](./scenarios.md)：场景与示例的对应关系
+- [开发者手册](./developer-guide.md)：控制面与 helper 的开发说明
+- [接入 CLI Adapter](./cli-adapter.md)
+- [技术说明](./technical.md)
+- [设计说明](./design.md)
+- [功能缺口](./roadmap.md)
+
+仓库协作约定见 [AGENTS.md](../AGENTS.md) 与 [协作指南](./agent-guidelines.md)。

@@ -1,0 +1,17 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Suite
+metadata:
+  name: codex
+spec:
+  repeat: 1
+  workloads:
+    - workloads/codex.yaml
+  profiles:
+    - profiles/process/kill.yaml
+    - profiles/file/edit.yaml
+    - profiles/file/storm.yaml
+    - profiles/file/chmod.yaml
+    - profiles/file/large.yaml
+    - profiles/git/lock.yaml
+    - profiles/network/delay.yaml
+    - profiles/llm/429.yaml

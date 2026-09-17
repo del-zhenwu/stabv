@@ -9,19 +9,28 @@ macOS **and Windows 10+** are first-class. Same YAML. Never document or implemen
 
 面向用户的文档用中文：`README.md`、`docs/*.md`（含用户手册）。写产品说明，不要把对话问答、约束原文或参考产品名贴进文档。
 
-- Windows setup: `scripts\setup.cmd`. Entry: `.\agentchaos.cmd`.
-- Unix setup: `./scripts/setup.sh`. Entry: `./agentchaos`.
+- 用户安装：`npm install -g agentchaos`，再 `agentchaos run examples/zcode.yaml`（adapter 固定 zcode，`inject` 是安装包里全部故障类）。不要让用户先 `init`，不要让用户装 Rust。
+- 改本仓库：Windows `scripts\setup.cmd` + `.\agentchaos.cmd`；Unix `./scripts/setup.sh` + `./agentchaos`。
 - README 安装/使用：Windows 与 macOS 各三行、互不注释。不要写成一行 Unix 后面跟 `# Windows: …`。
-- Optional: `npx agentchaos`. Primary path is the root wrappers.
 - Helper: Job Object, `SuspendThread`, `LockFileEx` on Windows; do not shell out to `wmic` / `taskkill`.
 - Specs: `executable` + `args`. POSIX `command:` breaks on Windows.
 
 **Layers:** TypeScript owns YAML, adapters, workflow, proxy, events, assertions, CLI/viewer. Rust helper owns process trees, PTY/ConPTY, Job Objects, native APIs, resource pressure, IPC. Do not mix.
 
+**Modern Architecture & Adaptation Principles:**
+- **Harbor-Style Adapter Contracts:** All agents implement declarative `AgentDescriptor`. Never hardcode desktop app internal bundle paths (e.g. `/Applications/*.app/Contents/Resources/...`) into runner logic. Standard 4-level executable resolution: `target.executable` > ENV var (`XXX_BIN`) > `PATH` > package manager global bins. Reverse engineering belongs strictly in probe skills (`.cursor/skills/agentchaos-adapter-probe`).
+- **Zero-Regex Typed Event Classification:** Never concatenate event fields into a string haystack to match fuzzy regexes (`/approval/`, `/item\.completed/`). Native events must be classified via typed Tagged Union matching per agent protocol to prevent false positives from conversational text.
+- **Dual-Track Chaos (Physical + Cognitive):** Coding agent testing must cover both OS-level physical faults (process, git, file, resource, network) and cognitive-level rule/context faults (`rule.conflict`, `rule.evict`, `rule.corrupt`, `context.poison`, `context.truncate`).
+- **`mode: auto` planner:** LLM observe/strike/stop injects faults. It does not grade the run. Replay with `agentchaos replay <run-id>`. Do not add a second planner engine.
+- **Strict Evidence Provenance:** Distinguish `[EMPIRICAL]` (real physical facts), `[STATIC_PROBE]` (probe skill inference), and `[AGENT_INFERENCE]` (causal deduction). Never report unverified guesses as empirical conclusions.
+- **Transparent MITM & Watchdogs:** `LlmProxy` transparently forwards to upstream LLMs when no faults are active; watchdogs detect silent hangs (`watchdog_io_stalled`) and runaway error loops (`watchdog_retry_storm`).
+
+**以终为始：** 先想用户怎么写、报告怎么看。用户入口是 `examples/zcode.yaml`（`adapter: zcode` + 全部 `inject` 类），系统展开组合。报告第一眼是「谁 × 打了什么」，再点进每条对错。`workloads/` 和 `profiles/` 是内部目录，不要当成用户主路径。
+
 **UX:** CLI / CI / YAML + `.\agentchaos.cmd view` / `./agentchaos view`. Do not add a desktop app as the primary interface.
 
-**Experiments:** Product YAML (`examples/codex-*.yaml`, `examples/zcode-*.yaml`) must drive a real agent on a failing fixture (edit code, run tests, touch Git). Do not use “wait N seconds” as the workload. Node `-e` stubs belong in control-plane tests and `*-fast.yaml` only. Success is invariants (orphans, git/workspace, duplicate tool side effects, session resume)—not model quality, not “the process came back”. Distinguish process crash vs stuck UI vs semantic divergence. Fault recover ≠ task recover ≠ side-effect recover.
+**Experiments:** Product YAML names the agent and `inject` kinds, then drives a real failing fixture (edit code, run tests, touch Git). Do not use “wait N seconds” as the workload. Node `-e` stubs belong in control-plane tests and `examples/probe/`. Success is checks you can measure (orphans, git/workspace, duplicate tool side effects, session resume)—not model quality, not “the process came back”. Distinguish process crash vs stuck UI vs semantic divergence. Fault recover ≠ task recover ≠ side-effect recover.
 
 **Do not:** replace SWE-bench; put experiment orchestration in the helper; fault a real home directory without explicit opt-in.
 
-**Build order** (no dates): (1) 非 Codex 完整 CLI adapter（PTY/ConPTY 已接入） (2) MCP/events/approval faults (3) disk/worktree/metrics/compare (4) helper release + desktop bridges (5) endurance / live viewer. Dashboard/CI/npm 见 `docs/design.md`。能力缺口：`docs/roadmap.md`。
+**Build order** (no dates): (1) 其余 CLI adapter（PTY/ConPTY、Claude/Kimi argv 已接入） (2) 取消竞态 / 压缩后漂移（Anthropic / MCP stdio / subagent / disk / worktree 已接入） (3) 句柄/巨量输出/metrics/compare (4) helper release + desktop bridges (5) endurance / live viewer. Dashboard/CI/npm 见 `docs/design.md`。能力缺口：`docs/roadmap.md`。

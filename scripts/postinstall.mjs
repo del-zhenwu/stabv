@@ -1,9 +1,12 @@
+import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 if (process.env.AGENTCHAOS_SKIP_HELPER === "1") process.exit(0);
-const result = spawnSync("cargo", ["build", "-p", "agentchaos-helper"], { encoding: "utf8" });
-if (result.error || result.status !== 0) {
-  console.warn("agentchaos: helper not built automatically. Install Rust (https://rustup.rs) then run:");
-  console.warn("  npx agentchaos setup");
-  if (result.stderr) console.warn(String(result.stderr).trim().slice(0, 400));
-}
+if (existsSync(resolve(root, ".git"))) process.exit(0);
+
+const script = resolve(root, "scripts/ensure-helper.mjs");
+const result = spawnSync(process.execPath, [script], { stdio: "inherit" });
+process.exit(result.status ?? 1);

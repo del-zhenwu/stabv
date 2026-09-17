@@ -1,0 +1,37 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: mcp-stdio-429
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - |
+        const { spawn } = require('node:child_process');
+        const bin = process.env.AGENTCHAOS_MCP_STDIO_BIN || './bin/agentchaos-mcp-stdio.js';
+        const mcp = spawn(process.execPath, ['--experimental-strip-types', bin], {
+          stdio: ['pipe', 'pipe', 'inherit']
+        });
+        mcp.stdout.on('data', d => {
+          const s = d.toString();
+          console.log('mcp out:', s);
+          if (s.includes('-32029') || s.includes('429')) {
+            process.exit(0);
+          }
+        });
+        setTimeout(() => {
+          mcp.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'echo' } }) + '\n');
+        }, 150);
+        setTimeout(() => process.exit(1), 3000);
+  timeout: 10s
+  faults:
+    - type: mcp
+      action: "429"
+      transport: stdio
+      at: 50ms
+  assertions:
+    - exit_zero
+    - output_contains: "-32029"
+    - mcp_stdio_exactly_once

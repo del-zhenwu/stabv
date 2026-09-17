@@ -1,0 +1,15 @@
+# 同一份故障，分别挂 ZCode / Codex / Claude / Kimi
+apiVersion: agentchaos.dev/v1alpha1
+kind: Suite
+metadata:
+  name: cli-agents
+spec:
+  repeat: 1
+  workloads:
+    - workloads/zcode.yaml
+    - workloads/codex.yaml
+    - workloads/claude.yaml
+    - workloads/kimi.yaml
+  profiles:
+    - profiles/process/kill.yaml
+    - profiles/llm/429.yaml

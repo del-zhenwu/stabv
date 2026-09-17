@@ -1,0 +1,10 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: ChaosProfile
+metadata:
+  name: process-kill
+spec:
+  faults:
+    - type: process
+      action: kill
+      when: tool_started
+      at: 100ms

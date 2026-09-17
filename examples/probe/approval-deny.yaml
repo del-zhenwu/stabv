@@ -1,0 +1,29 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: approval-deny
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - |
+        const fs = require("fs");
+        fs.writeSync(1, JSON.stringify({ type: "approval_requested", id: "appr_1" }) + "\n");
+        process.stdin.on("data", (buf) => {
+          fs.writeSync(1, "got " + buf.toString() + "\n");
+          process.exit(0);
+        });
+        setTimeout(() => process.exit(2), 8000);
+  timeout: 8s
+  faults:
+    - type: approval
+      action: deny
+      text: "n\n"
+      at: 80ms
+  assertions:
+    - exit_zero
+    - output_contains:got n
+    - fault_injected:approval.deny
+    - event_seen:approval_requested

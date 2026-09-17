@@ -1,0 +1,12 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: ChaosProfile
+metadata:
+  name: file-chmod
+spec:
+  faults:
+    - type: file
+      action: chmod
+      when: tool_started
+      at: 1s
+      path: src/sum.js
+      mode: "000"

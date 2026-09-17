@@ -29,11 +29,28 @@ async function listFiles(dir: string, acc: string[] = [], root = dir): Promise<s
   return acc;
 }
 
-export async function gitPorcelain(work: string): Promise<{ ok: boolean; text: string; head?: string }> {
+export async function gitPorcelain(work: string): Promise<{ ok: boolean; text: string; head?: string; worktrees?: number; worktreesLocked?: boolean }> {
   const status = await gitOut(work, ["status", "--porcelain=v1"]);
   if (!status.ok) return { ok: false, text: status.text };
   const head = await gitOut(work, ["rev-parse", "HEAD"]);
-  return { ok: true, text: status.text, head: head.text.trim() };
+  const wt = await gitWorktrees(work);
+  return { ok: true, text: status.text, head: head.text.trim(), worktrees: wt.count, worktreesLocked: wt.locked };
+}
+
+export async function gitWorktrees(work: string): Promise<{ ok: boolean; count: number; locked: boolean; paths: string[] }> {
+  const out = await gitOut(work, ["worktree", "list", "--porcelain"]);
+  if (!out.ok) return { ok: false, count: 0, locked: false, paths: [] };
+  const paths: string[] = [];
+  let locked = false;
+  for (const line of out.text.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("worktree ")) {
+      paths.push(trimmed.slice("worktree ".length).trim());
+    } else if (trimmed.startsWith("locked")) {
+      locked = true;
+    }
+  }
+  return { ok: true, count: paths.length, locked, paths };
 }
 
 function gitOut(cwd: string, args: string[]): Promise<{ ok: boolean; text: string }> {

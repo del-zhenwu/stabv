@@ -1,0 +1,23 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: session-schema-drift-demo
+spec:
+  target:
+    adapter: codex
+    sessionHome: .agentchaos-session
+    executable: node
+    args:
+      - "-e"
+      - |
+        console.log(JSON.stringify({ sessionId: "sess-resilient-101" }));
+        setTimeout(() => process.exit(0), 150);
+  timeout: 5s
+  faults:
+    - type: session
+      action: schema_drift
+      path: session.db
+      at: 40ms
+  assertions:
+    - exit_zero
+    - session_clean_recovery

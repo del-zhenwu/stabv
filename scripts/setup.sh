@@ -27,6 +27,7 @@ echo "→ agentchaos setup"
 node --experimental-strip-types packages/runner/src/cli.ts setup
 
 echo
-echo "Ready."
-echo "  ./agentchaos run examples/codex-smoke.yaml"
+echo "Ready (contributor checkout)."
+echo "  Users install with: npm install -g agentchaos"
+echo "  ./agentchaos run examples/probe/codex-smoke.yaml"
 echo "  ./agentchaos view --open"

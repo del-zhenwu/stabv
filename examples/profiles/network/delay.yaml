@@ -1,0 +1,12 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: ChaosProfile
+metadata:
+  name: network-delay
+spec:
+  faults:
+    - type: network
+      action: delay
+      when: tool_started
+      at: 500ms
+      duration: 8s
+      delay: 2s

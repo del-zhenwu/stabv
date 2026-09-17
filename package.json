@@ -1,6 +1,7 @@
 {
   "name": "agentchaos",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Chaos experiments for coding agents. Local CLI: inject faults, check the workspace.",
   "type": "module",
   "bin": {
     "agentchaos": "./bin/agentchaos.js"
@@ -8,14 +9,44 @@
   "engines": {
     "node": ">=22"
   },
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
+  "files": [
+    "bin",
+    "packages/runner/src",
+    "packages/runner/package.json",
+    "examples",
+    "helper/src",
+    "helper/Cargo.toml",
+    "scripts",
+    "Cargo.toml",
+    "Cargo.lock",
+    "dist",
+    "prebuilt",
+    "agentchaos",
+    "agentchaos.cmd",
+    "README.md"
+  ],
   "scripts": {
     "setup": "node --experimental-strip-types packages/runner/src/cli.ts setup",
     "agentchaos": "node --experimental-strip-types packages/runner/src/cli.ts",
     "view": "node --experimental-strip-types packages/runner/src/cli.ts view",
-    "build:helper": "cargo build -p agentchaos-helper",
+    "build:runner": "node scripts/build-runner.mjs",
+    "build:helper": "node scripts/ensure-helper.mjs --build",
     "postinstall": "node scripts/postinstall.mjs",
     "test": "npm run build:helper && node --experimental-strip-types --test packages/runner/test/*.test.ts",
-    "test:helper": "cargo test -p agentchaos-helper"
+    "pack": "npm run build:runner && npm pack",
+    "test:e2e": "node --experimental-strip-types --test --test-concurrency=1 --test-reporter spec tests/e2e-zcode-user.test.ts",
+    "test:helper": "cargo test -p agentchaos-helper",
+    "prepublishOnly": "node scripts/build-runner.mjs && node scripts/ensure-helper.mjs --check-pack && node --experimental-strip-types --test packages/runner/test/*.test.ts"
+  },
+  "dependencies": {
+    "@mariozechner/pi-agent-core": "^0.73.1",
+    "@mariozechner/pi-ai": "^0.73.1",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12"
   }
 }

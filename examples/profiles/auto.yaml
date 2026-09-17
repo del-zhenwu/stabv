@@ -1,0 +1,7 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: ChaosProfile
+metadata:
+  name: auto
+spec:
+  mode: auto
+  budget: 3

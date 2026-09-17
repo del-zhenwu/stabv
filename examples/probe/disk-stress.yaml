@@ -1,0 +1,22 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: disk-stress
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - "console.log('workload running'); setTimeout(() => process.exit(0), 600);"
+  timeout: 10s
+  faults:
+    - type: resource
+      action: disk
+      at: 100ms
+      duration: 300ms
+      mb: 32
+      path: .agentchaos-disk-stress.tmp
+  assertions:
+    - exit_zero
+    - not_timed_out

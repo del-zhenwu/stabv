@@ -1,0 +1,28 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: subagent-child-kill
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - |
+        const { spawn } = require('node:child_process');
+        console.log(JSON.stringify({ type: 'subagent_started', item: { type: 'agent_spawn' } }));
+        const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+        child.on('exit', () => {
+          console.log('subagent child terminated');
+          process.exit(0);
+        });
+        setTimeout(() => { child.kill('SIGKILL'); process.exit(0); }, 4000);
+  timeout: 10s
+  faults:
+    - type: subagent
+      action: kill
+      when: subagent_started
+      at: 100ms
+  assertions:
+    - exit_zero
+    - output_contains: "subagent child terminated"

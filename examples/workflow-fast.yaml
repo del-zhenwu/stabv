@@ -1,9 +1,0 @@
-apiVersion: agentchaos.dev/v1alpha1
-kind: Workflow
-metadata:
-  name: fast-serial
-spec:
-  tasks:
-    - serial:
-        - composed.yaml
-        - prompt-noise.yaml

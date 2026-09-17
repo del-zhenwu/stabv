@@ -1,224 +1,179 @@
 # AgentChaos 开发者手册
 
-给要改控制面、helper 或加故障类型的人。产品背景见 [design.md](./design.md)，分层见 [technical.md](./technical.md)。用户怎么跑实验见 [user-guide.md](./user-guide.md)。对接新 CLI 见 [cli-adapter.md](./cli-adapter.md)。Cursor / 协作者约定见仓库根目录 [AGENTS.md](../AGENTS.md)。
+本文档介绍如何在本仓库中开发与调试 AgentChaos。最终用户通过 npm 包 `agentchaos` 安装。
 
-## 1. 职责边界（必须遵守）
+相关文档：[设计说明](./design.md)、[技术说明](./technical.md)、[接入 CLI Adapter](./cli-adapter.md)、[协作指南](./agent-guidelines.md)。
 
-**TypeScript 控制面**（`packages/runner`）
+---
 
-- Codex / Claude / Kimi / ZCode / generic-cli adapter
-- YAML 实验模型、校验、调度
-- LLM / MCP / CONNECT 代理
-- 事件、断言、报告、CLI
+## 1. 分层
 
-**Rust helper**（`helper/`，二进制 `agentchaos-helper`）
+控制面与执行面分离：
 
-- 进程树发现与清理
-- pause / resume（Unix 信号，Windows 线程挂起）
-- Windows Job Object
-- 文件锁（flock / LockFileEx）、只读属性
-- CPU / 内存压力
-- Unix PTY / Windows ConPTY（`pty-spawn`）
-- 以后：macOS / Windows 桌面系统 API
+```text
+┌────────────────────────────────────────────────────────┐
+│  TypeScript 控制面 (packages/runner)                   │
+│  · YAML 解析、模型序列化、工作流调度 (runner / workflow)│
+│  · 透明网络代理 (proxy.ts: LLM OpenAI/Anthropic, MCP) │
+│  · 标准输出 Native Event 分类 (native-events.ts)       │
+│  · 断言判断 (assertions.ts) 与报告生成 (report.ts)      │
+│  · CLI 命令行与本地 Web 观察器 (cli.ts / view.ts)      │
+└──────────────────────────┬─────────────────────────────┘
+                           │ 结构化 IPC 命令（禁止在 TS 中直接操作 OS 树）
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│  Rust Platform Helper (helper/)                        │
+│  · 跨平台进程树枚举与销毁 (kill-tree / kill-process)   │
+│  · 进程挂起与恢复 (pause-tree / resume-tree)           │
+│  · 跨平台伪终端 (pty-spawn: Unix PTY / Win ConPTY)     │
+│  · 系统级文件锁与权限映射 (flock / LockFileEx / acl)   │
+│  · 物理资源压力施加 (cpu-stress / mem-stress / disk)   │
+└────────────────────────────────────────────────────────┘
+```
 
-不要把 YAML 解析、Codex 参数拼接、断言逻辑放进 Rust。不要在 TypeScript 里直接 `kill(-pid)` 或解析 `ps`。
+- TypeScript 控制面不直接操作进程树（不调用 `process.kill(-pid)`、不解析 `ps`、不调用 `taskkill` / `wmic`）。
+- Rust helper 不解析 YAML、不拼装特定 Agent 参数、不编排实验。
 
-## 2. 仓库结构
+---
+
+## 2. 目录结构与模块导航
 
 ```text
 packages/runner/src/
-  cli.ts           CLI：setup / init / validate / run / view / suite / workflow / watch / replay / list / report / recover
-  view.ts          本地评测 viewer
-  report.ts        report.json / report.html / report.md
-  spec.ts          实验模型与旧格式兼容
-  compose.ts       Workload / ChaosProfile 引用展开
-  suite.ts         pass^k 套件
-  workflow.ts      串行 / 并行工作流
-  capabilities.ts  能力发现与风险预览
-  observe.ts       workspace hash、git 状态、grader
-  runner.ts        调度主循环
-  adapters.ts      agent 启动计划
-  faults.ts        故障注入
-  proxy.ts         CONNECT + LLM HTTP 代理
-  helper.ts        调用 agentchaos-helper
-  dryrun.ts        --dry-run 计划
-  yaml-loc.ts      YAML 行号
-  assertions.ts    结束时检查
-  events.ts        JSONL
-  workspace.ts     隔离工作区与 fixture
+  cli.ts           CLI 命令行入口 (setup/validate/run/suite/workflow/view/...)
+  spec.ts          实验规格模型解析、校验与字段规范化
+  runner.ts        调度主循环（故障注入时钟、事件监听、状态快照）
+  faults.ts        各类故障的实际注入与恢复清理实现
+  helper.ts        HelperClient（与 Rust agentchaos-helper 交互的客户端）
+  proxy.ts         ConnectProxy (网络)、LlmProxy (OpenAI+Anthropic)、McpProxy
+  remote.ts        RemoteCoordinator 本地云端协调器（租约、心跳、远端检查点管理）
+  mcp-stdio.ts     MCP Stdio 交互代理与动态故障拦截器（支持上游代理、副作用去重、半写入）
+  native-events.ts 从 Agent 标准输出提取结构化 native event
+  observe.ts       工作区哈希快照、Git 状态提取、代码验证执行器
+  assertions.ts    实验结束时的不变量检查引擎
+  report.ts        生成 report.json、report.html、report.md 并计算可靠性指标
+  adapters.ts      Agent 启动参数拼装与无界面会话恢复管理
+  view.ts          本地轻量 HTTP Web Viewer 服务器
+
 helper/src/
-  main.rs          helper CLI（JSON stdout；pty-spawn 握手在 stderr）
-  process.rs       进程树（Unix ps + 信号）
-  pty.rs           Unix PTY / 调用 Windows ConPTY
-  win.rs           Windows 10+ Job Object / Toolhelp / 锁 / ConPTY
-  resource.rs      CPU / 内存 / flock / chmod
-examples/          用户可跑的实验
-docs/              设计与手册
+  main.rs          命令行分发、CLI 参数解析、结构化 JSON 输出与版本化协议能力发现
+  process.rs       Unix 进程树枚举 (ps) 与信号控制 (SIGKILL/SIGSTOP/SIGCONT)
+  win.rs           Windows 10+ 原生系统调用 (Job Object, Toolhelp32, LockFileEx, ConPTY, UI Automation)
+  desktop.rs       macOS Accessibility / screencapture 与 Windows UI Automation 原生桌面桥接
+  resource.rs      CPU 加压、内存加压、真实句柄耗尽 (handle-stress)、真实磁盘填满 (disk-exhaustion)、文件锁 (flock)
+  pty.rs           跨平台伪终端转发与子进程绑定
 ```
 
-根目录 `Cargo.toml` 是 workspace，成员只有 `helper`。根目录 `package.json` 用 npm workspaces 挂 `packages/*`。
+---
 
-遗留的 `agentchaos.py` 不是生产 runner，不要继续加功能。
+## 3. 本地开发与调试流程
 
-## 3. 本地开发
-
-依赖：Node 22+、Cargo、Git。仓库根目录：
+### 3.1 编译与测试
+依赖：Node.js 22+、Rust (Cargo)。
 
 **Windows 10+**
-
 ```bat
 scripts\setup.cmd
-.\agentchaos.cmd validate examples\codex-smoke.yaml
 npm test
 ```
 
 **macOS / Linux**
-
 ```bash
 ./scripts/setup.sh
-./agentchaos validate examples/codex-smoke.yaml
 npm test
 ```
 
-helper 产物：
+- `npm test` 会自动触发 `cargo build -p agentchaos-helper`，并运行 `packages/runner/test/control-plane.test.ts` 中的全部测试（无外部网络/登录依赖）。
+- 用户路径 e2e 在 `tests/e2e-zcode-user.test.ts`（`node:test`）：先 `npm run pack` 并安装 tgz，再 `npm run test:e2e`。`examples/zcode.yaml` 展开成多条 `it()`，一条故障一条测试，进度看框架的 ✔/✖。不进默认 `npm test`。CI 在控制面测试之后打包、装包，有 Secrets（`ZCODE_API_KEY` / `ZCODE_BASE_URL` / `ZCODE_MODEL`）才跑 e2e。GitHub 托管 runner 默认没有 ZCode，可用仓库变量 `E2E_RUNNER` 指到有 ZCode 的机器。
+- 单独调试 Helper：`cargo test -p agentchaos-helper`。
+- 改 `helper/` 后，GitHub Actions `prebuilt-helper` 会编好 `darwin-arm64`、`darwin-x64`、`win32-x64`，校验齐全后写回 `prebuilt/`。缺一份就不能 `npm publish`。用户装包不编 Rust。
 
-- Unix：`target/debug/agentchaos-helper`
-- Windows：`target/debug/agentchaos-helper.exe`
-
-控制面用 `HelperClient.discover()` 查找，可用 `AGENTCHAOS_HELPER` 覆盖。
-
-TypeScript 用 `node --experimental-strip-types` 直接跑 `.ts`，**不要**写 `constructor(private x)` 这类参数属性，也不要把 `??` 和 `||` 混在同一表达式且不加括号。
-
-改完后至少跑：
-
+### 3.2 运行环境覆盖
+Helper 产物默认位于 `target/debug/agentchaos-helper`（Windows 为 `.exe`）。可通过环境变量覆盖：
 ```bash
-npm test
+export AGENTCHAOS_HELPER=/path/to/custom-helper
 ```
 
-测真实 Codex（需登录）：
+---
 
-**Windows**
+## 4. Helper IPC 通信规范
 
-```bat
-.\agentchaos.cmd run examples\codex-process-kill.yaml
-```
+Helper 作为单次执行的子进程运行，**向 stdout 仅输出单行标准 JSON**：
+- 成功：`{"ok": true, ...}`
+- 失败：`{"ok": false, "error": "具体错误信息"}`，且进程退出码非 0。
 
-**macOS / Linux**
-
-```bash
-./agentchaos run examples/codex-process-kill.yaml
-```
-
-CI：`.github/workflows/ci.yml`，矩阵 `macos-latest` / `ubuntu-latest` / `windows-latest`。
-
-## 4. 一次 run 怎么走
-
-```text
-loadSpec → validate → prepareWorkspace
-  → 如需要则启动 network / llm proxy
-  → planLaunch（adapter）
-  → spawn agent（cwd = 隔离 workspace）
-  → 循环：到点 injectFault，到点 recover
-  → timeout 则 helper kill-tree
-  → finally：恢复故障、再 kill-tree、停 proxy
-  → assertions → report.json + report.html
-```
-
-调度在 `runner.ts`：`atMs == 0` 的非 process 故障在 spawn **之前**注入（例如 llm.429、git.lock）；process 故障等 pid 存在。每次注入后写 `shadow_compare`（harness 已注入、workspace hash、git lock、进程是否活着）。`file.edit` 可带 `sizeBytes`；`llm.401` 模拟 token 过期；`resource.port` 占用 TCP 端口（不走 helper）。
-
-事件写 JSONL，字段：`ts`、`run_id`、`event_id`、`event`、`state?`、`detail`。
-
-## 5. Helper IPC
-
-helper 是一次性子进程，stdout 一行 JSON。成功大致为 `{"ok":true,...}`，失败 `{"ok":false,"error":"..."}` 且退出码非 0。
-
+### 支持的核心子命令：
 ```text
 agentchaos-helper caps
 agentchaos-helper list-tree <pid>
 agentchaos-helper kill-tree <pid>
+agentchaos-helper kill-process <pid>
 agentchaos-helper pause-tree <pid>
 agentchaos-helper resume-tree <pid>
 agentchaos-helper cpu-stress --duration-ms N --threads N
 agentchaos-helper mem-stress --duration-ms N --mb N
+agentchaos-helper disk-stress --duration-ms N --mb N [--path P]
+agentchaos-helper handle-stress --duration-ms N [--limit N]
+agentchaos-helper disk-exhaustion --duration-ms N --path P [--max-mb N]
+agentchaos-helper desktop-screenshot --path P
+agentchaos-helper desktop-is-responsive <pid>
 agentchaos-helper flock --path P --duration-ms N
 agentchaos-helper acl --path P --mode 000
-agentchaos-helper pty-spawn --cwd DIR -- executable [args...]
+agentchaos-helper pty-spawn --cwd DIR -- [argv...]
+```
+> 特例说明：`pty-spawn` 在子进程启动瞬间向 **stderr** 输出一行 JSON 握手 `{"ok":true,"pid":...,"pty":true}`，随后 stdout/stdin 转换为原生的终端二进制字符流。
+> `caps` 返回当前 Helper 的能力清单及 IPC 协议版本号（当前为 `"protocol_version": "1.1.0"`）。
+> 所有长时压力任务由 TypeScript 端的 `HelperWorker` 统一管理生命周期与清理（`stopWorker` / `stopAllWorkers`）。
+
+---
+
+## 5. 新增故障类型
+
+当需要在系统中扩展一种全新的故障注入能力时，按以下依赖顺序开发：
+
+```text
+1. 扩展 spec.ts       定义 YAML 类型、参数与 normalizeFault 解析规则
+       ↓
+2. 扩展 faults.ts     编写 inject* 函数，返回必须的 recover 清理闭包
+       ↓
+3. 扩展 helper/ (若需) 在 Rust 中实现跨平台原生 API，并封装在 HelperClient 中
+       ↓
+4. 新增 YAML 样例     在 examples/ 下添加小巧的验证实验
+       ↓
+5. 补充自动化测试     在 control-plane.test.ts 中添加对应单元测试断言
 ```
 
-`pty-spawn` 在 stderr 打一行 `{"ok":true,"pid":...,"pty":true}`，随后 stdout 是终端字节流；stdin 写到 PTY/ConPTY。不要在 helper 里解析 YAML。
+### 关键细节要求：
+- **路径必须防逃逸**：涉及文件路径的故障必须调用 `assertInsideWorkspace(ctx.work, fault.path)`，严禁 `..` 越界。
+- **故障恢复必须幂等安全**：有 `durationMs` 的故障会在超时后被调度恢复；即使实验异常中断，`runner.ts` 的 `finally` 块也会执行恢复，必须确保资源（端口、文件锁、加压子进程）被完全清理，不污染下一个用例。
 
-加 helper 命令时：
+---
 
-1. `helper/src` 实现，stdout 只打 JSON
-2. `HelperClient` 包一层
-3. `caps` 里登记能力
-4. Unix 与 Windows 都要有行为或明确 `bail!("unsupported")`
+## 6. 控制面自动化测试原则
 
-Windows 实现放 `helper/src/win.rs`，用 `windows-sys`，不要再壳一层 `wmic` / `taskkill`（杀树用 Job Object + `TerminateProcess`）。
+`packages/runner/test/control-plane.test.ts` 的约定：
+1. **无外部网络、无登录凭据**：测试不请求真实的 OpenAI / Anthropic / Kimi API，不依赖真实 Agent 登录。
+2. **使用内置替身或 Mock**：
+   - 协议测试：直接向内置的 `LlmProxy`、`McpProxy`、`agentchaos-mcp-stdio.js` 发送请求。
+   - 进程生命周期测试：使用 `generic-cli` 配合 Node.js 短脚本模拟 Agent 行为。
+3. **确定性断言**：依据 `events.jsonl`、`shadow_compare`、工作区哈希与退出码判定。
 
-## 6. 加一种故障
+---
 
-1. `spec.ts`：类型 + `normalizeFault`（含旧名兼容，如 `process_kill`）
-2. `faults.ts`：`inject*`，返回 `recover` 函数；有 `duration` 时 runner 会在到期调用
-3. 路径类故障必须 `assertInsideWorkspace`
-4. 需要 OS 能力则走 helper，不要在 TS 里发信号
-5. `examples/` 加 YAML；能用 `generic-cli` + `node` 的不要依赖 Codex
-6. `packages/runner/test/control-plane.test.ts` 加断言
-7. 更新用户手册故障表
+## 7. 平台差异与未实现清单
 
-可恢复故障（pause、proxy、git.lock）必须能在 `finally` 里恢复，避免污染后续实验。
-
-## 7. 加一个 adapter
-
-对接步骤、generic-cli 试跑、具名 adapter 清单和 Codex / ZCode 对照见 [cli-adapter.md](./cli-adapter.md)。
-
-`adapters.ts` 的 `planLaunch` 只返回启动计划。故障仍走 `faults.ts` + helper。`generic-cli` 有 `executable` 就直接 spawn；只有 `command` 时 Unix 走 `/bin/sh -lc`，Windows 走 `cmd.exe /d /s /c`。跨平台示例一律用 `executable` + `args`。
-
-## 8. 实验模型
-
-`normalizeSpec` 同时接受：
-
-- `apiVersion: agentchaos.dev/v1alpha1` + `spec:`
-- 扁平旧格式（`target.executable`、`type: process_kill`）
-
-时长：数字 = 秒；字符串 `250ms` / `2s` / `1m` / `1h`。内部统一毫秒。
-
-改 schema 时保持旧实验能跑，或在 `normalizeFault` 做别名。
-
-## 9. 测试约定
-
-- 控制面测试不要依赖真实 LLM 账号
-- 用 `examples/*.yaml` 当契约，避免测试与示例分叉
-- helper 单测：Unix 解析 `ps`；Windows 杀 `cmd ping`（`#[cfg(windows)]`）
-- 不要用「sleep 很久」当通过条件，用事件和文件断言
-
-## 10. 平台差异
-
-| 能力 | macOS / Linux | Windows 10+ |
+| 能力模块 | macOS / Linux | Windows 10+ |
 | --- | --- | --- |
-| 进程枚举 | `ps` | Toolhelp32 |
-| kill | SIGKILL + 进程组 | Job Object + TerminateProcess |
-| pause | SIGSTOP / SIGCONT | SuspendThread / ResumeThread |
-| 文件锁 | flock | LockFileEx |
-| chmod | POSIX mode | 只读属性 |
-| spawn | `detached` 新会话 | 不 detached，`windowsHide` |
-| Codex 发现 | ChatGPT.app + PATH | LOCALAPPDATA / npm / PATH |
+| 进程树发现 | `/bin/ps` 管道递归遍历 | Toolhelp32 快照 API |
+| 进程树销毁 | `libc::kill(-pid, SIGKILL)` | Win32 Job Object + `TerminateProcess` |
+| 单进程精准销毁 | `libc::kill(pid, SIGKILL)` | `OpenProcess` + `TerminateProcess` |
+| 挂起与恢复 | `SIGSTOP` / `SIGCONT` | `SuspendThread` / `ResumeThread` |
+| 文件锁 | POSIX `flock(fd, LOCK_EX)` | Win32 `LockFileEx` |
+| 虚拟终端 | Unix PTY (`forkpty` / openpty) | Windows 10+ ConPTY 原生伪终端 |
+| 权限映射 | POSIX mode 权限位 | Windows 只读文件属性 (`FILE_ATTRIBUTE_READONLY`) |
 
-未实现（不要在文档里写成已支持）：UI Automation、UAC 向导、真正的轨迹 replay。PTY/ConPTY 已通过 `pty-spawn` 接入；缺能力时 runner 降级为管道。
-
-## 11. 提交时注意
-
-- 不要提交 `.agentchaos-runs/`、`node_modules/`、`target/`
-- 不要把真实 session、token、用户仓库路径写进示例
-- 示例 prompt 使用隔离 fixture 上的真实失败测试（改代码 / 跑测试 / Git），不要「等待 N 秒」
-- 用户手册与 `examples/` 行为保持一致
-
-## 12. 建议改动顺序
-
-新稳定性问题优先：
-
-1. 能否用现有故障类型写成 YAML？能则只加 example
-2. 新的 agent CLI？先 `generic-cli` 试通，再按 [cli-adapter.md](./cli-adapter.md) 写具名 adapter
-3. 只是断言不够？改 `assertions.ts`
-4. 需要 OS 原语？改 helper，再从 TS 调用
-5. 最后才动 `runner.ts` 主循环
+### 尚未实现
+- 桌面 UI 渲染器无响应（Renderer freeze）、窗口点击自动化（UI Automation）。
+- 系统弹窗自动化（macOS TCC 权限、Windows UAC 提权向导）。
+- 宿主机物理休眠/唤醒（Sleep / Wake）。
+- 宿主机物理句柄耗尽、物理内存彻底 OOM、文件系统底层损坏。

@@ -1,136 +1,81 @@
 # AgentChaos
 
-面向 coding agent 的声明式混沌实验。控制面是 TypeScript，Rust helper 负责进程树、信号、文件锁和资源压力。
+AgentChaos 是面向本机 Coding Agent 的故障注入 CLI。
 
-**macOS 和 Windows 10+ 共用同一套 YAML。** Windows 上 helper 是 `agentchaos-helper.exe`。
+按 YAML 指定目标 Agent 与故障类型，在隔离工作区中注入进程、文件、Git、网络与模型接口故障，并用本地报告核对结果。
 
-- [用户手册](docs/user-guide.md)
-- [稳定性实验](docs/scenarios.md)
-- [对接 CLI](docs/cli-adapter.md)
-- [开发者手册](docs/developer-guide.md)
-- [AGENTS.md](AGENTS.md) — 仓库约定
-- [Roadmap](docs/roadmap.md)（能力缺口）
-- [设计](docs/design.md)（形态与边界）
+## 功能
 
-## 平台
+- **故障覆盖：** 进程、子 Agent、会话、文件、Git、网络、模型接口、MCP、资源、审批、上下文压缩。
+- **一份 YAML：** 写 `target.adapter` 和 `inject`，系统展开组合。macOS 与 Windows 10+ 使用同一份配置。
+- **隔离执行：** 实验在 `.agentchaos-runs/` 中运行，不修改当前目录。安装包已包含各平台 helper，只需 Node.js 22+。
+- **本地报告：** `agentchaos view` 查看每次注入的结果。
 
-当前支持 **macOS** 和 **Windows 10+**（同一批实验）。Linux 上 CLI helper 可用；桌面 bridge 仍在 roadmap 里。
+## 快速开始
 
-| | macOS / Linux | Windows 10+ |
-| --- | --- | --- |
-| 安装 | `./scripts/setup.sh` | `scripts\setup.cmd` |
-| 入口 | `./agentchaos` | `.\agentchaos.cmd` |
-| Helper | `agentchaos-helper` | `agentchaos-helper.exe` |
-| 杀进程树 | 信号 | Job Object |
-| 暂停 | SIGSTOP | `SuspendThread` |
-| 文件锁 | flock | `LockFileEx` |
-
-`./agentchaos` 与 `.\agentchaos.cmd` 都转到同一套 CLI。YAML 请用 `executable` + `args`（POSIX `command:` 在 Windows 上会失败）。`target.pty: true` 走 helper PTY/ConPTY；UI Automation 尚未实现。
-
-## 安装与使用
-
-需要 **Node.js 22+** 和 **Rust**（`cargo`）。仓库根目录执行。
-
-**Windows 10+**
+### Windows 10+
 
 ```bat
-scripts\setup.cmd
-.\agentchaos.cmd run examples\codex-smoke.yaml
-.\agentchaos.cmd view --open
+npm install -g agentchaos
+agentchaos run examples\zcode.yaml
+agentchaos view --open
 ```
 
-**macOS / Linux**
+### macOS / Linux
 
 ```bash
-./scripts/setup.sh
-./agentchaos run examples/codex-smoke.yaml
-./agentchaos view --open
+npm install -g agentchaos
+agentchaos run examples/zcode.yaml
+agentchaos view --open
 ```
 
-`setup` 会编译 helper、探测 Codex / Claude / Kimi / ZCode，并写入 `.agentchaos/capabilities.json`。Smoke 示例用 Node 替身，不需要 Codex。`view` 打开 http://127.0.0.1:8080。也可以用 `npx agentchaos`，主入口仍是上面的包装脚本。
+```yaml
+# examples/zcode.yaml（安装包自带，adapter 固定 zcode）
+spec:
+  target:
+    adapter: zcode
+  fixture: broken-sum
+  inject:
+    - llm
+    - resource
+    - file
+    - git
+    - network
+    - process
+```
 
-| 命令 | 作用 |
-| --- | --- |
-| `agentchaos setup` | 编译 helper、发现 agent |
-| `agentchaos run <spec>` | 跑实验 / Suite / Workflow |
-| `agentchaos view --open` | 本地评测报告 |
-| `agentchaos validate <spec>` | schema、引用文件与风险预览 |
+`inject` 展开为安装包中对应类别的全部故障。换 Agent 时复制该文件并改 `adapter`。`broken-sum` 是自带示例（`src/sum.js` 实现有误）；测自己的工程时把 `fixture` 写成绝对路径。二进制不在 `PATH` 时设置 `ZCODE_BIN`。
 
-测真实 Codex（需已登录；修失败测试中途杀进程再 resume）：
+跑 ZCode 前填写三项：API Key、网关地址、模型名。
 
-**Windows**
+Windows 10+：
 
 ```bat
-.\agentchaos.cmd run examples\codex-kill-resume.yaml
+set ZCODE_API_KEY=sk-...
+set ZCODE_BASE_URL=https://你的网关
+set ZCODE_MODEL=你的模型
 ```
 
-**macOS / Linux**
+macOS / Linux：
 
 ```bash
-./agentchaos run examples/codex-kill-resume.yaml
+export ZCODE_API_KEY=sk-...
+export ZCODE_BASE_URL=https://你的网关
+export ZCODE_MODEL=你的模型
 ```
 
-测真实 ZCode（需已登录；会找 App 自带的 `zcode.cjs` 或 `PATH` 上的 `zcode`）：
+已经设过 `OPENAI_API_KEY` / `OPENAI_BASE_URL` 的，可以沿用，不必再写一遍。
 
-**Windows**
-
-```bat
-.\agentchaos.cmd run examples\zcode-process-kill.yaml
-```
-
-**macOS / Linux**
+不接真实模型、只检查 CLI 能否跑通：
 
 ```bash
-./agentchaos run examples/zcode-process-kill.yaml
+agentchaos run examples/probe/codex-smoke.yaml
 ```
 
-Codex 不在 `PATH` 时：
+## 文档
 
-**Windows**
+总览：[docs/README.md](docs/README.md)
 
-```powershell
-$env:CODEX_BIN = "C:\path\to\codex.exe"
-$env:ZCODE_BIN = "C:\path\to\zcode.cjs"
-```
-
-**macOS / Linux**
-
-```bash
-export CODEX_BIN=/path/to/codex
-export ZCODE_BIN=/path/to/zcode.cjs
-```
-
-## 报告
-
-每次 run 写在 `.agentchaos-runs/<id>/`：
-
-- `report.html` — 评测页（分数、指标、trace）
-- `report.json` / `report.md` — 给脚本和 CI
-- `events.jsonl` — 完整时间线
-
-## Windows 10+ 说明
-
-实验文件跨平台共用。Helper 用 Job Object 杀进程树、`SuspendThread`/`ResumeThread` 做 pause、`LockFileEx` 做 `file.lock`、只读属性映射 `chmod`、ConPTY 跑 `target.pty`。规格里优先 `executable` + `args`。UI Automation 仍待做；默认 CLI 实验仍用管道。
-
-CI 包含 `windows-latest`。
-
-## 实现顺序
-
-不绑定时间。能力缺口见 [docs/roadmap.md](docs/roadmap.md)，产品入口与边界见 [docs/design.md](docs/design.md)。按依赖推进：
-
-1. 更完整的非 Codex CLI adapter（PTY/ConPTY 已接入）
-2. 原生事件、MCP 代理、审批/压缩故障
-3. 磁盘 / git worktree / 指标 / schema / compare
-4. 版本化 helper + Mac/Windows 桌面 bridge，然后 `generic-desktop`
-5. endurance、实时 viewer；Dashboard / CI / npm 按设计文档，且不取代 CLI 主入口
-
-## 故障类型
-
-| 类型 | 动作 |
-| --- | --- |
-| `process` | `kill`, `pause`, `restart` |
-| `file` | `edit`, `delete`, `rename`, `chmod`, `symlink`, `lock` |
-| `git` | `lock`, `conflict`, `switch-branch` |
-| `network` | `delay`, `timeout`, `reset` |
-| `llm` | `429`, `500`, `delay`, `timeout`, `malformed`, `truncate`, `schema_drift`, `duplicate` |
-| `resource` | `cpu`, `memory` |
+- **使用与评测：** [用户手册](docs/user-guide.md) · [示例](examples/README.md) · [场景表](docs/scenarios.md)
+- **开发与扩展：** [开发者手册](docs/developer-guide.md) · [对接 CLI Adapter](docs/cli-adapter.md) · [技术说明](docs/technical.md) · [设计](docs/design.md)
+- **仓库协作：** [AGENTS.md](AGENTS.md) · [协作指南](docs/agent-guidelines.md) · [Roadmap](docs/roadmap.md)

@@ -1,0 +1,36 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: mcp-timeout
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - --input-type=module
+      - -e
+      - |
+        const url = process.env.AGENTCHAOS_MCP_URL;
+        try {
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "x" } }),
+          });
+          await res.text();
+          console.log("unexpected complete");
+          process.exit(1);
+        } catch {
+          console.log("disconnected");
+          process.exit(0);
+        }
+  timeout: 8s
+  faults:
+    - type: mcp
+      action: timeout
+      at: 0ms
+      delay: 150ms
+  assertions:
+    - exit_zero
+    - output_contains:disconnected
+    - fault_injected:mcp.timeout

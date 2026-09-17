@@ -6,18 +6,21 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::thread;
 use std::time::Duration;
-use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, BOOL, FALSE, HANDLE, INVALID_HANDLE_VALUE};
+use windows_sys::Win32::Foundation::{
+    CloseHandle, GetLastError, BOOL, FALSE, HANDLE, INVALID_HANDLE_VALUE,
+};
 use windows_sys::Win32::Storage::FileSystem::{
-    CreateFileW, GetFileAttributesW, LockFileEx, SetFileAttributesW, UnlockFileEx, FILE_ATTRIBUTE_NORMAL,
-    FILE_ATTRIBUTE_READONLY, FILE_SHARE_READ, FILE_SHARE_WRITE, LOCKFILE_EXCLUSIVE_LOCK, OPEN_ALWAYS,
+    CreateFileW, GetFileAttributesW, LockFileEx, SetFileAttributesW, UnlockFileEx,
+    FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_READONLY, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    LOCKFILE_EXCLUSIVE_LOCK, OPEN_ALWAYS,
 };
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, Thread32First, Thread32Next,
-    PROCESSENTRY32W, THREADENTRY32, TH32CS_SNAPPROCESS, TH32CS_SNAPTHREAD,
+    PROCESSENTRY32W, TH32CS_SNAPPROCESS, TH32CS_SNAPTHREAD, THREADENTRY32,
 };
 use windows_sys::Win32::System::JobObjects::{
-    AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject, TerminateJobObject,
-    JobObjectExtendedLimitInformation, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+    SetInformationJobObject, TerminateJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
     JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
 };
 use windows_sys::Win32::System::Threading::{
@@ -109,6 +112,10 @@ fn open_process(pid: u32, access: u32) -> Result<Handle> {
         }
         Ok(Handle(handle))
     }
+}
+
+pub fn kill_single(pid: u32) -> Result<()> {
+    terminate_pid(pid)
 }
 
 fn terminate_pid(pid: u32) -> Result<()> {
@@ -209,7 +216,11 @@ fn set_threads(root: u32, processes: &[ProcessInfo], suspend: bool) -> Result<Tr
                 return Ok(());
             }
             let _guard = Handle(handle);
-            let rc = if suspend { SuspendThread(handle) } else { ResumeThread(handle) };
+            let rc = if suspend {
+                SuspendThread(handle)
+            } else {
+                ResumeThread(handle)
+            };
             if rc == u32::MAX {
                 return Ok(());
             }
@@ -233,7 +244,10 @@ pub fn resume_tree(root: u32, processes: Vec<ProcessInfo>) -> Result<TreeSnapsho
 
 fn to_wide(path: &Path) -> Vec<u16> {
     use std::os::windows::ffi::OsStrExt;
-    path.as_os_str().encode_wide().chain(std::iter::once(0)).collect()
+    path.as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
 }
 
 pub fn hold_lock(path: &Path, duration_ms: u64) -> Result<()> {
@@ -256,7 +270,15 @@ pub fn hold_lock(path: &Path, duration_ms: u64) -> Result<()> {
         }
         let _guard = Handle(handle);
         let mut overlapped = std::mem::zeroed();
-        if LockFileEx(handle, LOCKFILE_EXCLUSIVE_LOCK, 0, u32::MAX, u32::MAX, &mut overlapped) == 0 {
+        if LockFileEx(
+            handle,
+            LOCKFILE_EXCLUSIVE_LOCK,
+            0,
+            u32::MAX,
+            u32::MAX,
+            &mut overlapped,
+        ) == 0
+        {
             bail!("LockFileEx failed: {}", last_error());
         }
         thread::sleep(Duration::from_millis(duration_ms.max(1)));
@@ -287,17 +309,24 @@ pub fn apply_mode(path: &Path, mode: &str) -> Result<()> {
 }
 
 /// Spawn argv on a ConPTY. Handshake JSON goes to stderr; then stdout is the console stream.
-pub fn run_conpty(cwd: Option<&Path>, extra_env: &[(String, String)], argv: &[String]) -> Result<i32> {
+pub fn run_conpty(
+    cwd: Option<&Path>,
+    extra_env: &[(String, String)],
+    argv: &[String],
+) -> Result<i32> {
     use std::os::windows::io::{FromRawHandle, RawHandle};
-    use windows_sys::Win32::Foundation::{SetHandleInformation, TRUE, HANDLE_FLAG_INHERIT};
-    use windows_sys::Win32::System::Console::{ClosePseudoConsole, CreatePseudoConsole, COORD, HPCON};
+    use windows_sys::Win32::Foundation::{SetHandleInformation, HANDLE_FLAG_INHERIT, TRUE};
+    use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
+    use windows_sys::Win32::System::Console::{
+        ClosePseudoConsole, CreatePseudoConsole, COORD, HPCON,
+    };
     use windows_sys::Win32::System::Pipes::CreatePipe;
     use windows_sys::Win32::System::Threading::{
-        CreateProcessW, DeleteProcThreadAttributeList, GetExitCodeProcess, InitializeProcThreadAttributeList,
-        UpdateProcThreadAttribute, WaitForSingleObject, CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT,
-        PROCESS_INFORMATION, STARTUPINFOEXW, STARTUPINFOW,
+        CreateProcessW, DeleteProcThreadAttributeList, GetExitCodeProcess,
+        InitializeProcThreadAttributeList, UpdateProcThreadAttribute, WaitForSingleObject,
+        CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT, PROCESS_INFORMATION,
+        STARTUPINFOEXW, STARTUPINFOW,
     };
-    use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
 
     const PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE: usize = 0x0002_0016;
     const INFINITE: u32 = 0xFFFF_FFFF;
@@ -437,6 +466,29 @@ fn wide(text: &str) -> Vec<u16> {
 
 fn wide_path(path: &Path) -> Vec<u16> {
     wide(&path.to_string_lossy())
+}
+
+pub fn handle_stress(duration_ms: u64, limit: Option<usize>) -> Result<usize> {
+    let max = limit.unwrap_or(16384);
+    let mut handles = Vec::new();
+    for _ in 0..max {
+        unsafe {
+            let h = windows_sys::Win32::System::Threading::CreateEventW(
+                std::ptr::null(),
+                FALSE,
+                FALSE,
+                std::ptr::null(),
+            );
+            if h == 0 || invalid(h) {
+                break;
+            }
+            handles.push(Handle(h));
+        }
+    }
+    let count = handles.len();
+    thread::sleep(Duration::from_millis(duration_ms.max(1)));
+    drop(handles);
+    Ok(count)
 }
 
 fn wide_cmdline(argv: &[String]) -> Vec<u16> {

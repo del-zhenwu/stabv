@@ -1,0 +1,24 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: event-tool-kill
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - |
+        const fs = require("fs");
+        fs.writeSync(1, JSON.stringify({ type: "item.started", item: { id: "call_1", type: "command_execution" } }) + "\n");
+        setTimeout(() => {}, 20000);
+  timeout: 8s
+  faults:
+    - type: process
+      action: kill
+      when: tool_started
+  assertions:
+    - exit_nonzero
+    - fault_injected:process.kill
+    - event_seen:tool_started
+    - no_orphan_process

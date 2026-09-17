@@ -1,0 +1,16 @@
+# 自主选故障：入口写 ZCode，inject 写 auto。
+# 先 export AGENTCHAOS_LLM_API_KEY
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: zcode-auto
+spec:
+  target:
+    adapter: zcode
+    prompt: "Fix src/sum.js so `node --test` passes."
+    json: true
+    bypassApprovals: true
+  fixture: broken-sum
+  timeout: 3m
+  inject:
+    - auto

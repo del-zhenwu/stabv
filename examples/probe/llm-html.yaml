@@ -1,0 +1,27 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: llm-html
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - --input-type=module
+      - -e
+      - |
+        const url = process.env.OPENAI_BASE_URL + "/chat/completions";
+        const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+        const body = await res.text();
+        console.log(body);
+        process.exit(body.includes("502 Bad Gateway") ? 0 : 1);
+  timeout: 8s
+  faults:
+    - type: llm
+      scene: proxy_html
+      at: 0ms
+      duration: 5s
+  assertions:
+    - exit_zero
+    - fault_injected:llm.html
+    - llm_triggered

@@ -1,0 +1,25 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: subagent-checkpoint-demo
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - "-e"
+      - |
+        console.log(JSON.stringify({ type: "subagent_started", toolCallId: "sub-worker-42" }));
+        setTimeout(() => {
+          console.log(JSON.stringify({ type: "subagent_finished", toolCallId: "sub-worker-42" }));
+          process.exit(0);
+        }, 150);
+  timeout: 5s
+  faults:
+    - type: subagent
+      action: checkpoint
+      checkpointId: chk-parent-savepoint
+      at: 50ms
+  assertions:
+    - exit_zero
+    - subagent_checkpoint_restored

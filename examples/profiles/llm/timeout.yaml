@@ -1,0 +1,10 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: ChaosProfile
+metadata:
+  name: llm-timeout
+spec:
+  faults:
+    - type: llm
+      action: timeout
+      at: 0ms
+      duration: 5s

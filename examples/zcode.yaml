@@ -1,0 +1,22 @@
+# ZCode 默认实验。系统按 inject 各类展开成多条。
+# fixture: broken-sum 对应 examples/fixtures/broken-sum（src/sum.js 为有意写错的实现）。
+# 运行时复制到 .agentchaos-runs/。自有项目请将 fixture 设为绝对路径。
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: zcode-default
+spec:
+  target:
+    adapter: zcode
+    prompt: "Fix src/sum.js so `node --test` passes."
+    json: true
+    bypassApprovals: true
+  fixture: broken-sum
+  timeout: 3m
+  inject:
+    - llm
+    - resource
+    - file
+    - git
+    - network
+    - process

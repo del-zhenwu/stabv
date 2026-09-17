@@ -1,0 +1,9 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: ChaosProfile
+metadata:
+  name: llm-truncate
+spec:
+  faults:
+    - type: llm
+      action: truncate
+      duration: 10s

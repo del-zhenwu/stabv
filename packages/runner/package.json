@@ -6,6 +6,8 @@
     "cli": "node --experimental-strip-types src/cli.ts"
   },
   "dependencies": {
+    "@mariozechner/pi-agent-core": "^0.73.1",
+    "@mariozechner/pi-ai": "^0.73.1",
     "yaml": "^2.8.1"
   },
   "devDependencies": {

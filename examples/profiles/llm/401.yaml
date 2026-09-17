@@ -1,0 +1,10 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: ChaosProfile
+metadata:
+  name: llm-401
+spec:
+  faults:
+    - type: llm
+      action: "401"
+      at: 0ms
+      duration: 5s

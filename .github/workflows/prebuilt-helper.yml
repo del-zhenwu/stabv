@@ -1,0 +1,145 @@
+name: prebuilt-helper
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - "v*"
+    paths:
+      - "helper/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "scripts/ensure-helper.mjs"
+      - ".github/workflows/prebuilt-helper.yml"
+  pull_request:
+    paths:
+      - "helper/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "scripts/ensure-helper.mjs"
+      - ".github/workflows/prebuilt-helper.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: prebuilt-helper-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            key: darwin-arm64
+            rust_target: aarch64-apple-darwin
+          - os: macos-14
+            key: darwin-x64
+            rust_target: x86_64-apple-darwin
+          - os: windows-latest
+            key: win32-x64
+            rust_target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+      - name: Build release helper
+        run: cargo build -p agentchaos-helper --release --target ${{ matrix.rust_target }}
+      - name: Stage asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          bin="target/${{ matrix.rust_target }}/release/agentchaos-helper"
+          if [ -f "${bin}.exe" ]; then
+            cp "${bin}.exe" "dist/agentchaos-helper-${{ matrix.key }}.exe"
+          else
+            cp "${bin}" "dist/agentchaos-helper-${{ matrix.key }}"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: helper-${{ matrix.key }}
+          path: dist/*
+
+  assemble:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Layout prebuilt tree
+        run: |
+          set -euo pipefail
+          mkdir -p prebuilt/darwin-arm64 prebuilt/darwin-x64 prebuilt/win32-x64
+          cp artifacts/helper-darwin-arm64/agentchaos-helper-darwin-arm64 prebuilt/darwin-arm64/agentchaos-helper
+          cp artifacts/helper-darwin-x64/agentchaos-helper-darwin-x64 prebuilt/darwin-x64/agentchaos-helper
+          cp artifacts/helper-win32-x64/agentchaos-helper-win32-x64.exe prebuilt/win32-x64/agentchaos-helper.exe
+          chmod +x prebuilt/darwin-arm64/agentchaos-helper prebuilt/darwin-x64/agentchaos-helper
+          ls -la prebuilt/darwin-arm64 prebuilt/darwin-x64 prebuilt/win32-x64
+      - name: Reject incomplete package
+        run: node scripts/ensure-helper.mjs --check-pack
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prebuilt-tree
+          path: prebuilt/**
+
+  commit-prebuilt:
+    needs: assemble
+    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: prebuilt-tree
+          path: prebuilt
+      - name: Commit packaged helpers
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f \
+            prebuilt/darwin-arm64/agentchaos-helper \
+            prebuilt/darwin-x64/agentchaos-helper \
+            prebuilt/win32-x64/agentchaos-helper.exe
+          if git diff --staged --quiet; then
+            echo "prebuilt helpers unchanged"
+            exit 0
+          fi
+          git commit -m "chore: refresh prebuilt helpers [skip ci]"
+          git push
+
+  release:
+    needs: assemble
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: prebuilt-tree
+          path: prebuilt
+      - name: Publish GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            prebuilt/darwin-arm64/agentchaos-helper \
+            prebuilt/darwin-x64/agentchaos-helper \
+            prebuilt/win32-x64/agentchaos-helper.exe \
+            --title "${{ github.ref_name }}" \
+            --notes "These binaries are also committed to prebuilt/ for npm publish. Users do not compile."

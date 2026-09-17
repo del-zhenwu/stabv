@@ -1,0 +1,12 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: ChaosProfile
+metadata:
+  name: file-edit
+spec:
+  faults:
+    - type: file
+      action: edit
+      when: tool_started
+      at: 200ms
+      path: src/sum.js
+      content: "export function add(a, b) {\n  return 0;\n}\n"

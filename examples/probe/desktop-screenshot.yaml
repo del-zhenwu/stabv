@@ -1,0 +1,22 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: desktop-screenshot-demo
+spec:
+  target:
+    adapter: generic-cli
+    desktop: true
+    executable: node
+    args:
+      - "-e"
+      - |
+        setTimeout(() => process.exit(0), 200);
+  timeout: 5s
+  faults:
+    - type: desktop
+      action: screenshot
+      path: demo-evidence.png
+      at: 40ms
+  assertions:
+    - exit_zero
+    - desktop_screenshot_captured: demo-evidence.png

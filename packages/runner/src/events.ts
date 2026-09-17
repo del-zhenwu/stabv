@@ -9,18 +9,36 @@ export type ChaosEvent = {
   event: string;
   state?: string;
   detail?: unknown;
+  toolCallId?: string;
+  sessionRevision?: string;
 };
+
+export type EventListener = (ev: ChaosEvent) => void | Promise<void>;
 
 export class EventStore {
   readonly path: string;
   readonly events: ChaosEvent[] = [];
   private runId: string;
+  private listeners: EventListener[] = [];
+
   constructor(runId: string, path: string) {
     this.runId = runId;
     this.path = path;
   }
 
-  async emit(event: string, detail?: unknown, state?: string): Promise<ChaosEvent> {
+  on(listener: EventListener): () => void {
+    this.listeners.push(listener);
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== listener);
+    };
+  }
+
+  async emit(
+    event: string,
+    detail?: unknown,
+    state?: string,
+    extra?: { toolCallId?: string; sessionRevision?: string },
+  ): Promise<ChaosEvent> {
     const rec: ChaosEvent = {
       ts: Date.now(),
       run_id: this.runId,
@@ -29,11 +47,21 @@ export class EventStore {
       state,
       detail,
     };
+    if (extra?.toolCallId) rec.toolCallId = extra.toolCallId;
+    if (extra?.sessionRevision) rec.sessionRevision = extra.sessionRevision;
     this.events.push(rec);
     await mkdir(dirname(this.path), { recursive: true });
     await appendFile(this.path, JSON.stringify(rec) + "\n");
     const summary = detail === undefined ? "" : ` ${safeSummary(detail)}`;
     console.log(`[${event}]${summary}`);
+
+    for (const listener of this.listeners) {
+      try {
+        await listener(rec);
+      } catch {
+        /* listener error swallowed */
+      }
+    }
     return rec;
   }
 

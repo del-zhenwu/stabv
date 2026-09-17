@@ -1,18 +1,23 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { appendFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import { appendFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import { repoRoot } from "./paths.ts";
 import { EventStore } from "./events.ts";
 import { HelperClient, type HelperTree } from "./helper.ts";
-import { planLaunch, applyResumeArgs } from "./adapters.ts";
-import { ConnectProxy, LlmProxy } from "./proxy.ts";
+import { planLaunch, applyResumeArgs, zcodeCliEnv, usesDiscoveredZcodeCli, zcodeCliCredentialError } from "./adapters.ts";
+import { applyPerturbations, faultDueAt, faultLabel, mergeRuntimeDefaultAssertions, type Experiment, type Fault } from "./spec.ts";
 import { injectFault } from "./faults.ts";
-import { runAssertions } from "./assertions.ts";
-import { computeMetrics, writeReport, type Report } from "./report.ts";
-import { prepareWorkspace } from "./workspace.ts";
-import { applyPerturbations, faultLabel, type Experiment, type Fault } from "./spec.ts";
 import { previewRisk } from "./capabilities.ts";
 import { envSnapshot, fileExists, gitPorcelain, toolCallId, workspaceFingerprint } from "./observe.ts";
+import { classifyAgentEvent } from "./native-events.ts";
+import { ConnectProxy, LlmProxy, McpProxy } from "./proxy.ts";
+import { RemoteCoordinator } from "./remote.ts";
+import { prepareWorkspace } from "./workspace.ts";
+import { runAssertions } from "./assertions.ts";
+import { computeMetrics, writeReport, type Report } from "./report.ts";
+import { AutoPlanner } from "./auto-planner.ts";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -25,15 +30,54 @@ type AgentProc = {
 };
 
 export async function runExperiment(exp: Experiment, specPath?: string): Promise<RunResult> {
+  if (usesDiscoveredZcodeCli(exp.target)) {
+    const credErr = zcodeCliCredentialError();
+    if (credErr) throw new Error(credErr);
+  }
   const runId = randomUUID();
   const helper = HelperClient.discover();
   const helperCaps = ((await helper.caps()) as { capabilities?: string[] }).capabilities ?? [];
   const { runRoot, work } = await prepareWorkspace(exp, runId);
   await writeFile(join(runRoot, "experiment.json"), JSON.stringify(exp.raw ?? exp, null, 2));
   const events = new EventStore(runId, join(runRoot, "events.jsonl"));
-  const network = exp.faults.some((f) => f.kind === "network") ? new ConnectProxy() : undefined;
-  const llm = exp.faults.some((f) => f.kind === "llm") ? new LlmProxy() : undefined;
+  const needsLlm =
+    exp.mode === "auto" ||
+    exp.faults.some((f) => f.kind === "llm" || f.kind === "rule" || f.kind === "context");
+  const needsMcp = exp.mode === "auto" || exp.faults.some((f) => f.kind === "mcp");
+  const needsNetwork = exp.faults.some((f) => f.kind === "network");
+  const needsRemote = exp.faults.some((f) => f.kind === "remote");
+  const network = needsNetwork ? new ConnectProxy() : undefined;
+  const upstreamCandidate =
+    process.env.AGENTCHAOS_LLM_UPSTREAM ??
+    exp.target.env?.AGENTCHAOS_LLM_UPSTREAM ??
+    (exp.target as any).llmUpstream ??
+    (exp.target.adapter === "zcode" ? zcodeCliEnv().ZCODE_BASE_URL : undefined) ??
+    process.env.ANTHROPIC_BASE_URL ??
+    process.env.OPENAI_BASE_URL;
+
+  const llmUpstream =
+    upstreamCandidate &&
+    !upstreamCandidate.includes("127.0.0.1:") &&
+    !upstreamCandidate.includes("localhost:")
+      ? upstreamCandidate
+      : undefined;
+
+  const llm = needsLlm ? new LlmProxy(llmUpstream) : undefined;
+  if (llm) {
+    llm.onTrigger = (detail) => {
+      void events.emit("llm_fault_triggered", detail);
+    };
+  }
+  const mcp = needsMcp ? new McpProxy() : undefined;
+  const remote = needsRemote ? new RemoteCoordinator() : undefined;
   const extraEnv: Record<string, string> = { AGENTCHAOS_RUN_ID: runId };
+  let sessionRoot: string | undefined;
+  if (exp.target.sessionHome) {
+    sessionRoot = join(runRoot, exp.target.sessionHome);
+    await mkdir(sessionRoot, { recursive: true });
+    if (exp.target.adapter === "codex") extraEnv.CODEX_HOME = sessionRoot;
+    else if (exp.target.adapter === "claude") extraEnv.CLAUDE_CONFIG_DIR = sessionRoot;
+  }
   if (exp.perturbations?.length) {
     extraEnv.AGENTCHAOS_PERTURBATION = exp.perturbations.map((p) => p.text).join("\n");
     if (exp.target.prompt) exp.target.prompt = applyPerturbations(exp.target.prompt, exp.perturbations);
@@ -52,7 +96,40 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
     const port = await llm.start();
     extraEnv.OPENAI_BASE_URL = `http://127.0.0.1:${port}/v1`;
     extraEnv.OPENAI_API_BASE = extraEnv.OPENAI_BASE_URL;
-    await events.emit("proxy_started", { kind: "llm", port });
+    extraEnv.ANTHROPIC_BASE_URL = `http://127.0.0.1:${port}`;
+    extraEnv.ANTHROPIC_API_URL = extraEnv.ANTHROPIC_BASE_URL;
+    extraEnv.ZCODE_BASE_URL = `http://127.0.0.1:${port}`;
+    if (exp.target.adapter === "zcode") {
+      const zEnv = zcodeCliEnv();
+      extraEnv.ZCODE_MODEL = zEnv.ZCODE_MODEL || "anthropic/GLM-5.3";
+      const apiKey = zEnv.ZCODE_API_KEY;
+      if (apiKey) extraEnv.ZCODE_API_KEY = apiKey;
+    }
+    await events.emit("proxy_started", { kind: "llm", port, upstream: llmUpstream });
+  }
+  const mcpPolicyFile = join(runRoot, "mcp-policy.json");
+  const mcpJournalFile = join(runRoot, "mcp-stdio.jsonl");
+  const subagentJournalFile = join(runRoot, "subagents.jsonl");
+  await writeFile(mcpPolicyFile, JSON.stringify({ action: "pass" }));
+  await writeFile(subagentJournalFile, "");
+  extraEnv.AGENTCHAOS_MCP_POLICY_FILE = mcpPolicyFile;
+  extraEnv.AGENTCHAOS_MCP_STDIO_BIN = resolve(repoRoot(), "bin/agentchaos-mcp-stdio.js");
+  extraEnv.AGENTCHAOS_MCP_JOURNAL_FILE = mcpJournalFile;
+
+  if (mcp) {
+    const port = await mcp.start();
+    const url = `http://127.0.0.1:${port}`;
+    extraEnv.AGENTCHAOS_MCP_URL = url;
+    extraEnv.MCP_URL = url;
+    extraEnv.MCP_SERVER_URL = url;
+    await events.emit("proxy_started", { kind: "mcp", port });
+  }
+
+  if (remote) {
+    const url = await remote.start();
+    extraEnv.AGENTCHAOS_REMOTE_URL = url;
+    extraEnv.REMOTE_URL = url;
+    await events.emit("proxy_started", { kind: "remote", url });
   }
 
   const plan = planLaunch(exp, extraEnv);
@@ -66,6 +143,13 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
   const injected: string[] = [];
   const done = new Set<Fault>();
   const toolIds = new Map<string, number>();
+  const nativeAt = new Map<string, number>();
+  const pendingTools = new Set<string>();
+  const seenNative = new Set<string>();
+  let lastNative: string | undefined;
+  let lastSubagentId: string | undefined;
+  let generation = 0;
+  let started = 0;
   let sessionId: string | undefined;
   let cancelled = false;
   let pendingResumeSessionId: string | undefined;
@@ -73,6 +157,13 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
   let resumeMismatched: string | undefined;
   let lastInLoopRecoveryMs: number | undefined;
   let outputAfterRecovery = false;
+  const autoPlanner = exp.mode === "auto" ? new AutoPlanner({ budget: exp.budget, model: exp.llm?.model }) : undefined;
+  let lastOutputAt = Date.now();
+  let ioStallDetected = false;
+  let retryStormDetected = false;
+  const errorTimestamps: number[] = [];
+  const retryThreshold = exp.retryStormThreshold ?? 4;
+  const retryWindowMs = exp.retryStormWindowMs ?? 3000;
 
   const emitShadow = async (phase: string) => {
     const hash = await workspaceFingerprint(work);
@@ -94,6 +185,13 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
       workspace: { hash },
       git,
       process: { pid, alive: processAlive },
+      agent: {
+        sessionId,
+        lastNative,
+        pendingTools: [...pendingTools],
+        compacting: lastNative === "compaction_started",
+        awaitingApproval: lastNative === "approval_requested",
+      },
     });
   };
   const onCancel = () => {
@@ -103,6 +201,7 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
   process.once("SIGTERM", onCancel);
 
   const startAgent = async () => {
+    generation += 1;
     state = "ExecutingTool";
     const env = { ...process.env, ...plan.env };
     const usePty = Boolean(exp.target.pty) && helperCaps.includes("pty");
@@ -123,6 +222,9 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
         detached: process.platform !== "win32",
         windowsHide: true,
       });
+      // Codex `exec` reads stdin when it is a pipe, even when the prompt is an argv.
+      // Close it for non-interactive runs; input.send experiments keep it open.
+      if (!exp.faults.some((fault) => fault.kind === "input" || fault.kind === "approval")) child.stdin?.end();
       agentPid = child.pid;
     }
     await writeFile(join(runRoot, "agent.pid"), String(agentPid ?? child.pid ?? ""));
@@ -152,7 +254,33 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
     const line = buf.toString();
     output += line;
     outputAfterRecovery = true;
+    lastOutputAt = Date.now();
     void events.emit("agent_output", { stream, line: truncate(line) });
+
+    const isErrStream = stream === "stderr";
+    const looksLikeError =
+      isErrStream ||
+      /(APICallError|retry|rate limit|internal server error|Cannot connect to API|other side closed|ECONNREFUSED|ETIMEDOUT)/i.test(line);
+
+    if (looksLikeError && !retryStormDetected) {
+      const now = Date.now();
+      errorTimestamps.push(now);
+      while (errorTimestamps.length > 0 && now - errorTimestamps[0] > retryWindowMs) {
+        errorTimestamps.shift();
+      }
+      if (errorTimestamps.length >= retryThreshold) {
+        retryStormDetected = true;
+        void events.emit("watchdog_retry_storm", {
+          count: errorTimestamps.length,
+          windowMs: retryWindowMs,
+          threshold: retryThreshold,
+          stream,
+          sample: truncate(line.trim()),
+          pid: agentPid(),
+        });
+      }
+    }
+
     for (const piece of line.split("\n")) {
       const trimmed = piece.trim();
       if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) continue;
@@ -170,13 +298,40 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
           }
           sessionId = sid;
         }
+        const native = classifyAgentEvent(parsed, exp.target.adapter);
+        if (native) {
+          lastNative = native.kind;
+          seenNative.add(native.kind);
+          if (!nativeAt.has(native.kind)) nativeAt.set(native.kind, Math.max(0, Date.now() - started));
+          if (native.kind === "tool_started" && native.toolCallId) pendingTools.add(native.toolCallId);
+          if (native.kind === "tool_finished" && native.toolCallId) pendingTools.delete(native.toolCallId);
+          if ((native.kind === "subagent_started" || native.kind === "subagent_finished") && native.toolCallId) {
+            lastSubagentId = native.toolCallId;
+            appendFileSync(
+              subagentJournalFile,
+              JSON.stringify({
+                ts: Date.now(),
+                type: native.kind === "subagent_started" ? "started" : "finished",
+                id: native.toolCallId,
+                parentPid: agentPid(),
+                sessionId,
+                generation,
+              }) + "\n",
+            );
+          }
+          void events.emit(native.kind, native.detail, inferState(parsed), {
+            toolCallId: native.toolCallId,
+            sessionRevision: native.sessionRevision ?? sessionId,
+          });
+          void applyDueFaults(Math.max(0, Date.now() - started));
+        }
       } catch {
         /* ignore */
       }
     }
   };
 
-  const applyDueFaults = async (elapsed: number) => {
+  const applyDueFaultsUnlocked = async (elapsed: number) => {
     for (const rec of [...recoveries]) {
       if (elapsed >= rec.at) {
         recoveries.splice(recoveries.indexOf(rec), 1);
@@ -186,12 +341,23 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
       }
     }
     for (const fault of exp.faults) {
-      if (done.has(fault) || elapsed < fault.atMs) continue;
-      if ((fault.kind === "process" || fault.kind === "input") && !agentPid()) continue;
+      if (done.has(fault) || elapsed < faultDueAt(fault, nativeAt)) continue;
+      if (
+        (fault.kind === "process" ||
+          fault.kind === "input" ||
+          fault.kind === "approval" ||
+          fault.kind === "compaction" ||
+          (fault.kind === "subagent" && fault.action !== "conflict")) &&
+        !agentPid()
+      ) {
+        continue;
+      }
       done.add(fault);
       injected.push(faultLabel(fault));
       const recover = await injectFault(fault, {
         work,
+        runRoot,
+        sessionRoot,
         helper,
         events,
         getPid: agentPid,
@@ -203,7 +369,16 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
         },
         network,
         llm,
+        mcp,
+        mcpPolicyFile,
+        remote,
         children: helperChildren,
+        recordSubagent: (record) => {
+          appendFileSync(
+            subagentJournalFile,
+            JSON.stringify({ ts: Date.now(), ...record, id: record.id ?? lastSubagentId, parentPid: agentPid(), sessionId, generation }) + "\n",
+          );
+        },
         restart: async () => {
           restartPending = true;
         },
@@ -211,14 +386,25 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
       // `resume: true` implies the restart loop: resuming a killed agent still
       // requires relaunching its process.
       if (
-        fault.kind === "process" &&
-        (fault.action === "restart" || (fault.action === "kill" && (exp.recovery.restart || exp.recovery.resume)))
+        (fault.kind === "process" &&
+          (fault.action === "restart" || (fault.action === "kill" && (exp.recovery.restart || exp.recovery.resume)))) ||
+        (fault.kind === "compaction" && (exp.recovery.restart || exp.recovery.resume))
       ) {
         restartPending = true;
       }
-      if (fault.durationMs) recoveries.push({ at: fault.atMs + fault.durationMs, recover });
+      if (fault.durationMs) recoveries.push({ at: elapsed + fault.durationMs, recover });
       await emitShadow(`fault:${faultLabel(fault)}`);
     }
+  };
+
+  let faultGate: Promise<void> = Promise.resolve();
+  const applyDueFaults = (elapsed: number): Promise<void> => {
+    const next = faultGate.then(() => applyDueFaultsUnlocked(elapsed));
+    faultGate = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
   };
 
   await events.emit(
@@ -234,12 +420,45 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
     state,
   );
 
-  const started = Date.now();
+  started = Date.now();
   let result: { code: number | null; signal: NodeJS.Signals | null } = { code: null, signal: null };
   let startHash = "";
   try {
     await applyDueFaults(0);
     await startAgent();
+    const injectPlannerFault = async (fault: Fault) => {
+      injected.push(faultLabel(fault));
+      return await injectFault(fault, {
+        work,
+        runRoot,
+        sessionRoot,
+        helper,
+        events,
+        getPid: agentPid,
+        writeStdin: (data) => {
+          agent?.child.stdin?.write(data);
+        },
+        closeStdin: () => {
+          agent?.child.stdin?.end();
+        },
+        network,
+        llm,
+        mcp,
+        mcpPolicyFile,
+        remote,
+        children: helperChildren,
+        recordSubagent: (record) => {
+          appendFileSync(
+            subagentJournalFile,
+            JSON.stringify({ ts: Date.now(), ...record, id: record.id ?? lastSubagentId, parentPid: agentPid(), sessionId, generation }) + "\n",
+          );
+        },
+        restart: async () => {
+          restartPending = true;
+        },
+      });
+    };
+    autoPlanner?.start(events, injectPlannerFault);
     const timeoutAt = started + exp.timeoutMs;
     startHash = await workspaceFingerprint(work);
     await events.emit("workspace_snapshot", { phase: "start", hash: startHash });
@@ -266,10 +485,22 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
         sleep(Math.min(50, remaining)).then(() => ({ tag: "tick" as const })),
       ]);
       await applyDueFaults(Date.now() - started);
+      if (exp.ioStallTimeoutMs && !ioStallDetected && agent && Date.now() - lastOutputAt >= exp.ioStallTimeoutMs) {
+        ioStallDetected = true;
+        await events.emit("watchdog_io_stalled", {
+          stalledDurationMs: Date.now() - lastOutputAt,
+          thresholdMs: exp.ioStallTimeoutMs,
+          pid: agentPid(),
+        });
+      }
       if (race.tag === "exit") {
         result = race.v;
         if (restartPending) {
           restartPending = false;
+          appendFileSync(
+            subagentJournalFile,
+            JSON.stringify({ ts: Date.now(), type: "restart", generation, sessionId }) + "\n",
+          );
           const resumed = exp.recovery.resume ? applyResumeArgs(plan, exp.target, sessionId) : false;
           await events.emit("recovery_started", { action: resumed ? "resume" : "restart", sessionId: resumed ? sessionId : undefined });
           if (resumed) pendingResumeSessionId = sessionId;
@@ -283,6 +514,7 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
     await events.emit("run_error", { error: String(err) });
     throw err;
   } finally {
+    autoPlanner?.stop();
     for (const rec of recoveries) {
       try {
         await rec.recover();
@@ -291,11 +523,14 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
       }
     }
     for (const extra of helperChildren) {
-      if (extra.exitCode == null && extra.pid) extra.kill("SIGKILL");
+      helper.stopWorker(extra);
     }
+    helper.stopAllWorkers();
     await killAgent();
     await network?.stop();
     await llm?.stop();
+    await mcp?.stop();
+    await remote?.stop();
     process.off("SIGINT", onCancel);
     process.off("SIGTERM", onCancel);
   }
@@ -317,7 +552,10 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
   await events.emit("run_finished", { ...result, timedOut, cancelled }, state);
 
   const duplicateToolIds = [...toolIds.entries()].filter(([, n]) => n > 1).map(([id]) => id);
-  const checks = await runAssertions(exp.assertions, {
+  const assertions = exp.assertionsDefaulted
+    ? mergeRuntimeDefaultAssertions(exp.assertions, injected)
+    : exp.assertions;
+  const checks = await runAssertions(assertions, {
     code: result.code,
     signal: result.signal,
     timedOut,
@@ -332,6 +570,14 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
     expected: exp.expected,
     lastRecoveryInLoopMs: lastInLoopRecoveryMs,
     outputAfterRecovery,
+    nativeEvents: [...seenNative],
+    lostToolResults: pendingTools.size,
+    mcpJournal: mcpJournalFile,
+    subagentJournal: subagentJournalFile,
+    remoteCoordinator: remote,
+    runRoot,
+    llmHits: llm?.hits,
+    llmTriggered: llm?.triggered,
   });
   for (const check of checks) await events.emit("assertion_checked", check);
 
@@ -344,6 +590,10 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
     resumeVerified,
     resumeMismatched,
   });
+  if (llm) {
+    metrics.llmHits = llm.hits;
+    metrics.llmTriggered = llm.triggered;
+  }
   const report: Report = {
     id: runId,
     name: exp.name,
@@ -360,6 +610,11 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
     risk: previewRisk(exp, helperCaps),
     env: envSnapshot(),
     workspaceHash: { start: startHash || undefined, end: endHash },
+    autoDecisions: autoPlanner?.getHistory() ?? [],
+    ioStalled: ioStallDetected,
+    retryStormDetected,
+    agent: exp.agent,
+    inject: exp.inject,
   };
   await writeReport(runRoot, report, events.events);
   await appendFile(join(runRoot, "..", "index.jsonl"), JSON.stringify({ id: runId, name: exp.name, passed: report.passed, ts: finishedAt, report: join(runRoot, "report.json") }) + "\n");

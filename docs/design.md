@@ -2,25 +2,29 @@
 
 ## 背景
 
-Codex、Claude Code、Kimi Code、ZCode、Cursor、Zed/ACP 及工作类 agent 已经是长时、多轮、工具驱动的软件系统。传统只检查最终代码的 benchmark 无法解释客户端 crash、操作卡死、session 丢失、工具重复执行、上下文压缩退化和跨平台权限问题。
+Coding agent、研究 Agent、办公 Agent、浏览器 Agent 和自动化 Agent 都已经是长时、多轮、工具驱动的软件系统。Codex、Claude Code、Kimi Code、ZCode、Cursor、Zed/ACP 是当前最适合验证的第一批对象，但问题本身不限于代码生成。传统只检查最终产物的 benchmark 无法解释客户端 crash、操作卡死、session 丢失、工具重复执行、上下文压缩退化和跨平台权限问题。
 
 AgentChaos 的目标是建立类似 Chaos Mesh 的实验平台，把被测对象定义为：
 
 ```text
-模型 + agent harness + tool/MCP + shell/PTY + workspace/Git + OS + desktop UI
+模型 + agent harness + tool/MCP + 执行环境 + 状态存储 + OS + desktop UI
 ```
+
+## 用户配置与报告
+
+用户在一份 YAML 中声明目标 Agent 与故障类别（`target.adapter` + `inject`）。系统展开组合。报告首先展示该组合，再列出各条结果。`workloads/` 与 `profiles/` 为内部目录。
 
 ## 目标
 
 - 测量运行时可靠性、恢复能力和最终状态一致性。
 - 黑盒优先，兼容 CLI 和桌面客户端。
-- 同一 workload/profile 可比较 Codex、Claude、Kimi、ZCode 等 agent。
+- 同一 workload/profile 可比较 coding、研究、办公、浏览器和自动化 Agent。
 - 支持 Mac/Windows，并把桌面权限隔离到最小权限 helper。
 - 让长时任务、组合故障和中断恢复成为可重复实验。
 
-## 不测什么
+## 评测范围
 
-AgentChaos 不替代 SWE-bench 等能力 benchmark，也不把模型生成质量本身当作唯一目标；它关注 agent 在故障和长轨迹中的系统行为。堆更多复杂评测题、空等几小时，通常也复现不了 harness 问题。应用事件压缩（工具次数、压缩次数、断连次数）而不是墙钟。
+评测对象是 Agent 在故障与长任务中的系统行为：运行时可靠性、恢复能力与最终状态一致性。能力类 benchmark（例如 SWE-bench）与模型生成质量本身不作为唯一目标。时间维度使用事件压缩（工具次数、压缩次数、断连次数）。
 
 ## 边界
 
@@ -36,6 +40,59 @@ AgentChaos 不替代 SWE-bench 等能力 benchmark，也不把模型生成质量
 1. **进程崩溃**：进程退出、无响应、渲染进程挂掉、子进程泄漏、资源耗尽。
 2. **操作卡死**：进程还在，但无法继续——审批弹不出来、流式输出停住、取消无效、session 恢复失败。
 3. **语义分叉**：应用没崩，但状态不可恢复——同一命令执行两次、tool 结果错配、压缩后丢掉约束、显示完成但测试没过、agent / harness / 文件 / Git 四个视图不一致。
+
+## 选择 Harness Chaos 还是桌面端 Chaos
+
+先问被测系统的边界在哪里：如果验收对象是「agent 如何处理模型、工具、shell、文件和 Git」，使用 Harness Chaos；如果验收对象包含「用户如何通过窗口操作 agent，以及桌面进程如何与系统权限、睡眠、更新和渲染器交互」，才使用桌面端 Chaos。两者不是两个互斥产品，而是从内到外的两层测试。
+
+| 问题 | 首选 Harness Chaos | 必须增加桌面端 Chaos |
+| --- | --- | --- |
+| Codex/Claude/Kimi CLI 是否能恢复 | 是 | 否 |
+| tool call、MCP、shell、PTY、Git、文件状态 | 是 | 否 |
+| 网络、LLM API、上下文压缩、重试 | 是 | 否 |
+| agent 进程树、孤儿进程、端口、资源 | 是 | 否 |
+| 审批弹窗是否出现、关闭后状态是否正确 | 否 | 是 |
+| 输入框、快捷键、输入法、拖拽、焦点 | 否 | 是 |
+| Electron/webview/renderer crash | 否 | 是 |
+| Mac TCC、Windows UAC/ACL/Defender 交互 | 否 | 是 |
+| 睡眠唤醒、显示器拔插、自动更新 | 否 | 是 |
+| 用户看到的「卡死」和 UI 恢复 | 只能间接判断 | 是 |
+
+### 先做 Harness Chaos 的情况
+
+- 产品有 CLI 或非交互模式，这是 Codex、Claude Code、Kimi Code、ZCode 最稳定的测试入口。
+- 需要比较不同 agent 或不同模型，必须先把 UI 变量去掉。
+- 问题表现为工具重复、session 丢失、上下文压缩错误、Git/workspace 不一致、网络恢复失败。
+- 需要在 CI、批量 Suite、`pass^k` 或长时 endurance 中重复运行。
+
+Harness Chaos 的验收重点是：最终测试结果、session 是否能继续、工具副作用是否重复、workspace/Git 是否一致、进程树是否清理。它回答「agent harness 是否可靠」。
+
+### 需要桌面端 Chaos 的情况
+
+- CLI 测试通过，但用户仍然遇到窗口无响应、审批不出现、输入失效或流式区域停止刷新。
+- 故障只可能发生在桌面生命周期：sleep/wake、renderer crash、自动更新、显示器/DPI 变化、窗口关闭、浏览器 OAuth 回调。
+- 产品的真实工作入口只有桌面 App，CLI 并不共享相同的 session、权限或进程架构。
+- 需要验证 TCC/UAC/ACL、Accessibility、Screen Recording、系统代理或网络扩展等 OS 集成。
+
+桌面端 Chaos 的验收重点是：窗口是否仍可操作、用户输入是否到达正确 session、审批状态是否一致、renderer/agent/backend 是否能恢复、系统权限变化是否被正确处理。它回答「用户实际接触到的桌面产品是否可靠」。
+
+### 推荐的测试顺序
+
+```text
+Harness baseline
+→ Harness fault injection
+→ Harness recovery / replay
+→ 跨平台 CLI 对比
+→ 桌面 smoke（窗口、输入、审批）
+→ 桌面故障（renderer、sleep/wake、权限、更新）
+→ Harness + 桌面组合故障
+```
+
+桌面自动化会引入焦点、渲染、时序和权限变量，失败后难以归因。桌面测试应由已在 Harness 层稳定复现、或明确属于 UI/OS 的场景触发。
+
+### 如何判断一个失败属于哪一层
+
+同一 workload 至少跑两次：一次走 CLI/Harness，一次走桌面入口。若两者在相同故障下都失败，优先归因 harness、模型协议或工具；若 CLI 通过而桌面失败，优先归因 UI、桌面进程、权限或桌面到 harness 的桥接；若只有特定 OS 失败，归因对应平台 helper 或系统 API。报告必须保留这三个维度：`agent/harness`、`workspace/process`、`desktop/os`。
 
 ## 设计原则
 
@@ -55,7 +112,7 @@ AgentChaos 不替代 SWE-bench 等能力 benchmark，也不把模型生成质量
 - Chaos Mesh：CRD、独立 controller、daemon、workflow、scheduler、duration/recovery。
 - ReliabilityBench：`pass^k`、语义扰动和工具/API fault tolerance。
 - AgentChaos：LLM API fault proxy。
-- harnessbench、coding-agent-eval-harness：固定模型比较 harness、hidden grader、可中断继续和 telemetry。
+  - harnessbench、coding-agent-eval-harness：固定模型比较 coding harness、hidden grader、可中断继续和 telemetry；方法可推广到其它工具型 Agent。
 - Coding-Agent Harness Study：长任务 kill/resume 与 rework。
 - Codex/Claude/Kimi/ZCode/Zed：审批、sandbox、hooks、MCP、subagent、session 和 ACP。
 
@@ -65,7 +122,7 @@ AgentChaos 不替代 SWE-bench 等能力 benchmark，也不把模型生成质量
 
 ## 产品形态
 
-**当前主入口**是 CLI + YAML + 本地 HTML viewer：`./agentchaos` / `.\agentchaos.cmd`，报告用 `view`。不要把桌面应用做成主界面。
+**当前主入口**是 npm 包 `agentchaos`：本机 CLI、YAML 与 `agentchaos view`。故障注入发生在本机 Agent 进程。
 
 以后可以加其它入口，但必须共用同一套 runner 语义（只调 API，不直接控目标进程）：
 
@@ -73,7 +130,7 @@ AgentChaos 不替代 SWE-bench 等能力 benchmark，也不把模型生成质量
 - **YAML 实验编辑器**：运行前 schema、权限、风险检查（现在是 `validate` 打 JSON）
 - **可复用的 CI runner**：GitHub Action、退出码契约、报告上传、macOS + Windows 矩阵。仓库自己的 CI 不是对外产品。
 - **稳定 HTTP/WebSocket runner API**
-- **npm 发布 `@agentchaos/runner`**，不必从源码 `setup`
+- **预编译 helper**：npm 包必须自带 `prebuilt/darwin-arm64`、`darwin-x64`、`win32-x64`。缺一个就不能发。用户装包没有 fallback，也不装 Rust。`cargo` 只给改本仓库的人用
 
 桌面 helper 只提供 UI、进程、网络和系统事件，不编排实验。页面划分和用户流程见文内「面向用户的交互界面」。能力缺口（PTY、MCP、endurance 等）见 [roadmap.md](./roadmap.md)，不在路线图里再列一份包装待办。
 
@@ -105,7 +162,7 @@ MVP（已具备）：进程 kill、文件外部编辑、时间调度、事件日
 
 ## 技术选型建议
 
-首选 **Rust** 作为核心执行器和跨平台 helper 语言。它适合长期运行的进程监督、并发事件流、PTY/ConPTY、网络代理和资源控制，单二进制发布，内存安全，Mac/Windows 行为容易保持一致，适合维护一个跨平台核心。
+采用 **TypeScript control plane/runner + Rust 跨平台 helper**。TypeScript 适合实验编排、协议代理、adapter 和报告生态；Rust 适合长期运行的进程监督、PTY/ConPTY、资源控制和平台原语。Rust 是执行 OS 原语的边界组件，不负责编排实验、解析 YAML 或构造 Codex argv。
 
 推荐分层：
 

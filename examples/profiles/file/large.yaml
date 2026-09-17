@@ -1,0 +1,12 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: ChaosProfile
+metadata:
+  name: file-large
+spec:
+  faults:
+    - type: file
+      action: edit
+      when: tool_started
+      at: 1s
+      path: src/sum.js
+      sizeBytes: 131072

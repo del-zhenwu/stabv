@@ -1,0 +1,12 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: ChaosProfile
+metadata:
+  name: resource-cpu
+spec:
+  faults:
+    - type: resource
+      action: cpu
+      when: tool_started
+      at: 100ms
+      duration: 2s
+      threads: 2

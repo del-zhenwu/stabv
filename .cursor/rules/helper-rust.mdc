@@ -10,4 +10,4 @@ JSON stdout only (`{"ok":true,...}` / `{"ok":false,"error":"..."}`). No YAML, Co
 
 - Unix: `ps` + signals. Windows 10+: Job Object, Toolhelp32, `SuspendThread` / `ResumeThread`, `LockFileEx`. Never `wmic` or `taskkill`.
 - New commands: implement Unix **and** Windows, or `bail!("unsupported")`. Register in `caps`.
-- Swift/COM/UI Automation stay out until the desktop-bridge roadmap step. PTY/ConPTY is `pty-spawn` (handshake JSON on stderr, then raw terminal bytes on stdout).
+- Desktop bridge primitives use native Accessibility/UI Automation calls in the helper; full Swift/COM desktop adapter and permission flows remain out of scope until their roadmap step. PTY/ConPTY is `pty-spawn` (handshake JSON on stderr, then raw terminal bytes on stdout).

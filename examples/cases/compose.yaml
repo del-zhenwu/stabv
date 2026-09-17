@@ -1,0 +1,7 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: composed-file-edit
+spec:
+  workload: ../workloads/probe-idle.yaml
+  profile: ../profiles/file-edit.yaml

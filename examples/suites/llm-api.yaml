@@ -1,0 +1,24 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Suite
+metadata:
+  name: llm-api-taxonomy
+spec:
+  repeat: 1
+  experiments:
+    - ../probe/llm-429.yaml
+    - ../probe/llm-401.yaml
+    - ../probe/llm-timeout.yaml
+    - ../probe/llm-truncate.yaml
+    - ../probe/llm-malformed.yaml
+    - ../probe/llm-schema-drift.yaml
+    - ../probe/llm-duplicate.yaml
+    - ../probe/llm-empty.yaml
+    - ../probe/llm-corrupt.yaml
+    - ../probe/llm-html.yaml
+    - ../probe/llm-stale-cache.yaml
+    - ../probe/llm-stale-data.yaml
+    - ../probe/llm-wrong-entity.yaml
+    - ../probe/llm-degrade.yaml
+    - ../probe/llm-field-tool-calls.yaml
+    - ../probe/llm-schedule-burst.yaml
+    - ../probe/llm-schedule-position.yaml

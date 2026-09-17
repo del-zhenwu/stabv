@@ -1,5 +1,5 @@
 import { cp, mkdir, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { repoRoot } from "./paths.ts";
@@ -24,14 +24,34 @@ export async function prepareWorkspace(exp: Experiment, runId: string, repo = re
   return { runRoot, work };
 }
 
-function resolveFixture(fixture: string, repo: string): string {
+export function listBundledFixtures(repo = repoRoot()): string[] {
+  const dir = resolve(repo, "examples/fixtures");
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+}
+
+export function resolveFixture(fixture: string, repo = repoRoot()): string {
   const candidates = [
     resolve(fixture),
+    resolve(process.cwd(), fixture),
     resolve(repo, fixture),
     resolve(repo, "examples/fixtures", fixture),
   ];
   const found = candidates.find((p) => existsSync(p));
-  if (!found) throw new Error(`fixture not found: ${fixture}`);
+  if (!found) {
+    const bundled = listBundledFixtures(repo);
+    const sample = process.platform === "win32" ? "C:\\\\work\\\\my-app" : "/path/to/your-app";
+    throw new Error(
+      [
+        `找不到工程目录 fixture: ${fixture}`,
+        `短名对应安装包里的 examples/fixtures/<名>。现有：${bundled.join(", ") || "(无)"}`,
+        `自己的工程请写绝对路径，例如 fixture: ${sample}`,
+      ].join("\n"),
+    );
+  }
   return found;
 }
 

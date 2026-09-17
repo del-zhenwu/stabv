@@ -1,0 +1,9 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: ChaosProfile
+metadata:
+  name: llm-500
+spec:
+  faults:
+    - type: llm
+      action: "500"
+      duration: 10s

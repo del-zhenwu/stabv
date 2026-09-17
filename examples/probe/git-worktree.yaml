@@ -1,0 +1,22 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: git-worktree-leak
+spec:
+  git: true
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - "console.log('agent running git tasks'); setTimeout(() => process.exit(0), 600);"
+  timeout: 10s
+  faults:
+    - type: git
+      action: worktree-leak
+      at: 100ms
+      duration: 300ms
+      branch: chaos-wt-leak
+  assertions:
+    - exit_zero
+    - git_worktree_clean
