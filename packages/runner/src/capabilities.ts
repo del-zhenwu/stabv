@@ -125,24 +125,24 @@ export function previewRisk(exp: Experiment, helperCaps: string[] = []): RiskPre
       } else {
         status = "unsupported";
       }
-      const capabilities: Record<string, CapabilityStatus> = {};
-      for (const cap of required) {
-        if (cap === "pty" && !helperSet.has("pty")) capabilities[cap] = "degraded";
-        else if (
-          cap === "proxy" ||
-          cap === "cli" ||
-          cap === "auto-llm" ||
-          cap === "session-resume" ||
-          cap === "session-isolation" ||
-          cap === "remote-lifecycle" ||
-          helperSet.has(cap) ||
-          helperSet.has(cap.replace("-tree", ""))
-        ) {
-          capabilities[cap] = "ok";
-        } else {
-          capabilities[cap] = "unsupported";
-        }
-      }
+    }
+  }
+  const capabilities: Record<string, CapabilityStatus> = {};
+  for (const cap of required) {
+    if (cap === "pty" && !helperSet.has("pty")) capabilities[cap] = "degraded";
+    else if (
+      cap === "proxy" ||
+      cap === "cli" ||
+      cap === "auto-llm" ||
+      cap === "session-resume" ||
+      cap === "session-isolation" ||
+      cap === "remote-lifecycle" ||
+      helperSet.has(cap) ||
+      helperSet.has(cap.replace("-tree", ""))
+    ) {
+      capabilities[cap] = "ok";
+    } else {
+      capabilities[cap] = "unsupported";
     }
   }
   return {
