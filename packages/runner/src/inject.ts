@@ -8,6 +8,7 @@ export type InjectSpec = {
 };
 
 /** Default product inject: every kind under examples/profiles/<kind>/. */
+/** Safe default catalog. Advanced protocol, desktop, session and remote faults are opt-in. */
 export const DEFAULT_INJECT = ["llm", "resource", "file", "git", "network", "process"];
 
 export function comboLabel(agent?: string, inject?: string[]): string {
