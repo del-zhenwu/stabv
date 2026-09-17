@@ -772,15 +772,11 @@ function renderTaskGroups(groups: TaskGroup[]): string {
 }
 
 const INDEX_SCRIPT = `<script>
-let last = null;
-setInterval(async () => {
-  try {
-    const res = await fetch("/api/runs");
-    const text = await res.text();
-    if (last !== null && text !== last) location.reload();
-    last = text;
-  } catch {}
-}, 3000);
+try {
+  const stream = new EventSource("/api/runs/stream");
+  stream.addEventListener("runs", () => location.reload());
+  stream.onerror = () => stream.close();
+} catch {}
 </script>`;
 
 export type IndexRun = {
