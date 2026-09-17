@@ -14,7 +14,15 @@ import { isNativeEventKind, type NativeEventKind } from "./native-events.ts";
 import { faultLineNumbers, faultPrefix, type SourceLoc } from "./yaml-loc.ts";
 import { parseInject } from "./inject.ts";
 
-export type AdapterName = "codex" | "claude" | "kimi" | "zcode" | "generic-cli";
+export type AdapterName =
+  | "codex"
+  | "claude"
+  | "kimi"
+  | "zcode"
+  | "opencode"
+  | "cursor"
+  | "zed"
+  | "generic-cli";
 
 export type ProcessFault = {
   kind: "process";
@@ -84,10 +92,36 @@ export type ResourceFault = {
 
 export type InputFault = {
   kind: "input";
-  action: "send" | "eof";
+  action: "send" | "eof" | "encoding" | "block";
   atMs: number;
   durationMs?: number;
   text?: string;
+  encoding?: "utf8" | "latin1" | "base64";
+};
+
+export type CancelFault = {
+  kind: "cancel";
+  action: "interrupt" | "double" | "late";
+  atMs: number;
+  durationMs?: number;
+};
+
+export type HookFault = {
+  kind: "hook";
+  action: "fail" | "overwrite" | "block";
+  atMs: number;
+  durationMs?: number;
+  path: string;
+  content?: string;
+};
+
+export type StdoutFault = {
+  kind: "stdout";
+  action: "huge";
+  atMs: number;
+  durationMs?: number;
+  bytes?: number;
+  chunkBytes?: number;
 };
 
 export type McpFault = {
@@ -121,7 +155,7 @@ export type ApprovalFault = {
 
 export type CompactionFault = {
   kind: "compaction";
-  action: "interrupt";
+  action: "interrupt" | "drift";
   atMs: number;
   durationMs?: number;
 };
@@ -138,7 +172,7 @@ export type SubagentFault = {
 
 export type SessionFault = {
   kind: "session";
-  action: "corrupt" | "truncate" | "lock" | "schema_drift";
+  action: "corrupt" | "truncate" | "lock" | "schema_drift" | "migration";
   atMs: number;
   durationMs?: number;
   path: string;
@@ -185,6 +219,9 @@ export type Fault = (
   | LlmFault
   | ResourceFault
   | InputFault
+  | CancelFault
+  | HookFault
+  | StdoutFault
   | McpFault
   | ApprovalFault
   | CompactionFault
@@ -656,11 +693,29 @@ function normalizeFault(input: any, index: number, loc?: SourceLoc): Fault {
   }
   if (type === "input") {
     const action = input.action ?? "send";
-    if (!["send", "eof"].includes(action)) {
+    if (!["send", "eof", "encoding", "block"].includes(action)) {
       throw new Error(at(`unknown input action ${action}`));
     }
-    if (action === "send" && input.text == null) throw new Error(at("input.send requires text"));
-    return finishFault({ kind: "input", action, atMs, durationMs, text: input.text != null ? String(input.text) : undefined }, input, index, loc);
+    if ((action === "send" || action === "encoding") && input.text == null) throw new Error(at(`input.${action} requires text`));
+    const encoding = input.encoding == null ? "utf8" : String(input.encoding);
+    if (!["utf8", "latin1", "base64"].includes(encoding)) throw new Error(at(`unknown input encoding ${encoding}`));
+    return finishFault({ kind: "input", action, atMs, durationMs, text: input.text != null ? String(input.text) : undefined, encoding: encoding as InputFault["encoding"] }, input, index, loc);
+  }
+  if (type === "cancel") {
+    const action = input.action ?? "interrupt";
+    if (!["interrupt", "double", "late"].includes(action)) throw new Error(at(`unknown cancel action ${action}`));
+    return finishFault({ kind: "cancel", action, atMs, durationMs }, input, index, loc);
+  }
+  if (type === "hook") {
+    const action = input.action ?? "fail";
+    if (!["fail", "overwrite", "block"].includes(action)) throw new Error(at(`unknown hook action ${action}`));
+    if (!input.path) throw new Error(at("hook fault requires path"));
+    return finishFault({ kind: "hook", action, atMs, durationMs, path: String(input.path), content: input.content != null ? String(input.content) : undefined }, input, index, loc);
+  }
+  if (type === "stdout") {
+    const action = input.action ?? "huge";
+    if (action !== "huge") throw new Error(at(`unknown stdout action ${action}`));
+    return finishFault({ kind: "stdout", action: "huge", atMs, durationMs, bytes: input.bytes == null ? undefined : Number(input.bytes), chunkBytes: input.chunkBytes == null ? undefined : Number(input.chunkBytes) }, input, index, loc);
   }
   if (type === "approval") {
     const action = input.action ?? "deny";
@@ -680,8 +735,8 @@ function normalizeFault(input: any, index: number, loc?: SourceLoc): Fault {
   }
   if (type === "compaction") {
     const action = input.action ?? "interrupt";
-    if (action !== "interrupt") throw new Error(at(`unknown compaction action ${action}`));
-    const finished = finishFault({ kind: "compaction", action: "interrupt", atMs, durationMs }, input, index, loc);
+    if (!["interrupt", "drift"].includes(action)) throw new Error(at(`unknown compaction action ${action}`));
+    const finished = finishFault({ kind: "compaction", action: action as CompactionFault["action"], atMs, durationMs }, input, index, loc);
     if (!finished.when) finished.when = "compaction_started";
     return finished;
   }
@@ -705,7 +760,7 @@ function normalizeFault(input: any, index: number, loc?: SourceLoc): Fault {
   }
   if (type === "session") {
     const action = input.action ?? "corrupt";
-    if (!["corrupt", "truncate", "lock", "schema_drift"].includes(action)) {
+    if (!["corrupt", "truncate", "lock", "schema_drift", "migration"].includes(action)) {
       throw new Error(at(`unknown session action ${action}`));
     }
     if (!input.path) throw new Error(at("session fault requires path"));
@@ -1028,7 +1083,10 @@ export function validateExperiment(exp: Experiment): string[] {
     (exp.target.adapter === "codex" ||
       exp.target.adapter === "zcode" ||
       exp.target.adapter === "claude" ||
-      exp.target.adapter === "kimi") &&
+      exp.target.adapter === "kimi" ||
+      exp.target.adapter === "opencode" ||
+      exp.target.adapter === "cursor" ||
+      exp.target.adapter === "zed") &&
     !exp.target.prompt &&
     !exp.target.command &&
     !exp.target.args &&

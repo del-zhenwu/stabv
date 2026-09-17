@@ -21,6 +21,7 @@ export function requiredCapabilities(exp: Experiment): string[] {
   for (const fault of exp.faults) {
     if (fault.kind === "process") caps.add("kill-tree");
     if (fault.kind === "compaction") caps.add("kill-tree");
+    if (fault.kind === "cancel") caps.add("cli");
     if (fault.kind === "process" && fault.action === "pause") {
       caps.add("pause-tree");
       caps.add("resume-tree");
@@ -81,13 +82,16 @@ export function previewRisk(exp: Experiment, helperCaps: string[] = []): RiskPre
       status = "unsupported";
     }
   }
-  if (exp.faults.some((f) => f.kind === "llm") && (exp.target.adapter === "codex" || exp.target.adapter === "zcode" || exp.target.adapter === "claude" || exp.target.adapter === "kimi")) {
+  if (
+    exp.faults.some((f) => f.kind === "llm") &&
+    ["codex", "zcode", "claude", "kimi", "opencode", "cursor", "zed"].includes(exp.target.adapter)
+  ) {
     notes.push(`${exp.target.adapter} may ignore OPENAI_BASE_URL; llm faults can be degraded`);
     if (status !== "unsupported") status = "degraded";
   }
   if (exp.faults.some((f) => f.kind === "mcp")) {
     notes.push("mcp faults need the agent to call AGENTCHAOS_MCP_URL (HTTP JSON-RPC)");
-    if (exp.target.adapter === "codex" || exp.target.adapter === "zcode" || exp.target.adapter === "claude" || exp.target.adapter === "kimi") {
+    if (["codex", "zcode", "claude", "kimi", "opencode", "cursor", "zed"].includes(exp.target.adapter)) {
       notes.push(`${exp.target.adapter} may not use AGENTCHAOS_MCP_URL unless an MCP server is pointed at the proxy`);
       if (status !== "unsupported") status = "degraded";
     }
@@ -146,7 +150,7 @@ export function previewRisk(exp: Experiment, helperCaps: string[] = []): RiskPre
     }
   }
   return {
-    writesWorkspace: exp.faults.some((f) => f.kind === "file" || f.kind === "git" || (f.kind === "resource" && (f.action === "disk" || f.action === "disk_exhaustion"))),
+    writesWorkspace: exp.faults.some((f) => f.kind === "file" || f.kind === "git" || f.kind === "hook" || (f.kind === "resource" && (f.action === "disk" || f.action === "disk_exhaustion"))),
     killsProcess: exp.faults.some(
       (f) =>
         (f.kind === "process" && (f.action === "kill" || f.action === "restart")) ||

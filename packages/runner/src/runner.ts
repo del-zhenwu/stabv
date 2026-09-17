@@ -346,7 +346,8 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
         (fault.kind === "process" ||
           fault.kind === "input" ||
           fault.kind === "approval" ||
-          fault.kind === "compaction" ||
+          fault.kind === "cancel" ||
+          (fault.kind === "compaction" && fault.action === "interrupt") ||
           (fault.kind === "subagent" && fault.action !== "conflict")) &&
         !agentPid()
       ) {
@@ -367,6 +368,10 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
         closeStdin: () => {
           agent?.child.stdin?.end();
         },
+        sendSignal: (signal) => {
+          agent?.child.kill(signal);
+        },
+        emitOutput: (stream, data) => onChunk(stream, Buffer.from(data)),
         network,
         llm,
         mcp,
@@ -388,7 +393,7 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
       if (
         (fault.kind === "process" &&
           (fault.action === "restart" || (fault.action === "kill" && (exp.recovery.restart || exp.recovery.resume)))) ||
-        (fault.kind === "compaction" && (exp.recovery.restart || exp.recovery.resume))
+        (fault.kind === "compaction" && fault.action === "interrupt" && (exp.recovery.restart || exp.recovery.resume))
       ) {
         restartPending = true;
       }
@@ -441,6 +446,10 @@ export async function runExperiment(exp: Experiment, specPath?: string): Promise
         closeStdin: () => {
           agent?.child.stdin?.end();
         },
+        sendSignal: (signal) => {
+          agent?.child.kill(signal);
+        },
+        emitOutput: (stream, data) => onChunk(stream, Buffer.from(data)),
         network,
         llm,
         mcp,

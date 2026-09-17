@@ -128,6 +128,7 @@ CLI 实验默认用管道采集 stdout/stderr。`target.pty: true` 时走 helper
 - session 存储：已支持对隔离 `target.sessionHome` 中的真实文件做损坏、截断和锁；禁止打真实用户主目录；migration/recovery 仍缺
 - 更完整的 Windows ACL（现 `chmod` 只映射只读属性）
 - 只杀某个子进程、不杀整树：已支持（helper `kill-process` / `subagent.kill`）
+- 取消竞态（单次/重复 SIGINT）、有界巨量 stdout、shell 输入编码/阻塞、hook 失败/覆盖/锁、压缩后上下文漂移，以及隔离 session migration 故障已支持。
 
 **桌面 / OS**（依赖 helper）
 

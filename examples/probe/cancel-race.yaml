@@ -1,0 +1,22 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: cancel-race
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - |
+        process.on("SIGINT", () => { console.log(JSON.stringify({type:"cancelled"})); process.exit(130); });
+        setTimeout(() => {}, 20000);
+  timeout: 5s
+  faults:
+    - type: cancel
+      action: double
+      at: 100ms
+  assertions:
+    - exit_nonzero
+    - fault_injected:cancel.double
+    - no_orphan_process

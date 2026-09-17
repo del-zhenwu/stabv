@@ -1,0 +1,20 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: session-migration
+spec:
+  target:
+    adapter: codex
+    sessionHome: .agentchaos-session
+    executable: node
+    args:
+      - -e
+      - "console.log(JSON.stringify({sessionId:'migration-demo'})); setTimeout(() => {}, 1000)"
+  timeout: 5s
+  faults:
+    - type: session
+      action: migration
+      path: session.db
+      at: 100ms
+  assertions:
+    - fault_injected:session.migration
