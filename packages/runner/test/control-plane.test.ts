@@ -24,7 +24,7 @@ import { runWorkflow } from "../src/workflow.ts";
 import { applyResumeArgs, discoverAgents, planLaunch, AGENT_REGISTRY, zcodeCliEnv, isZcodeCaptchaEndpoint, zcodeCliCredentialError } from "../src/adapters.ts";
 import { runAssertions } from "../src/assertions.ts";
 import { parseFlags, writeStarterSpec } from "../src/cli.ts";
-import { listBundledFixtures, resolveFixture } from "../src/workspace.ts";
+import { assertInsideWorkspace, listBundledFixtures, resolveFixture } from "../src/workspace.ts";
 import { bundledHelperPath, helperExeName, helperPlatformKey, missingPackagedHelpers } from "../src/helper-bin.ts";
 import { existsSync } from "node:fs";
 import { startViewer, collectRuns } from "../src/view.ts";
@@ -854,6 +854,13 @@ describe("eval report", () => {
 });
 
 describe("cli and viewer robustness", () => {
+  it("rejects workspace escapes using platform-aware relative paths", () => {
+    const work = join(tmpdir(), "agentchaos-workspace");
+    assert.equal(assertInsideWorkspace(work, "src/index.js"), resolve(work, "src/index.js"));
+    assert.throws(() => assertInsideWorkspace(work, "../outside.txt"), /escapes workspace/);
+    assert.throws(() => assertInsideWorkspace(work, "../../outside.txt"), /escapes workspace/);
+  });
+
   it("rejects unknown flags instead of dropping them", () => {
     const ok = parseFlags(["spec.yaml", "--repeat", "3", "--json", "--dry-run", "--continue"]);
     assert.deepEqual(ok.positional, ["spec.yaml"]);

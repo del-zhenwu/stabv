@@ -124,7 +124,7 @@ CLI 实验默认用管道采集 stdout/stderr。`target.pty: true` 时走 helper
 **Workspace / Git / 资源**
 
 - Git worktree 残留：已支持（`git.worktree-leak` / `git.worktree-lock` + 断言 `git_worktree_clean`）
-- 有界磁盘压力：已支持（`resource.disk` 通过 helper `disk-stress` 加压并在 duration 后恢复清理）；真实磁盘耗尽、句柄耗尽、巨量 stdout（超长流式输出）仍缺
+- 有界磁盘压力与隔离极限：已支持（`resource.disk`、`resource.disk_exhaustion`、`resource.handle_exhaustion`）；宿主机级物理耗尽、巨量 stdout（超长流式输出）仍缺
 - session 存储：已支持对隔离 `target.sessionHome` 中的真实文件做损坏、截断和锁；禁止打真实用户主目录；migration/recovery 仍缺
 - 更完整的 Windows ACL（现 `chmod` 只映射只读属性）
 - 只杀某个子进程、不杀整树：已支持（helper `kill-process` / `subagent.kill`）
@@ -142,7 +142,7 @@ CLI 实验默认用管道采集 stdout/stderr。`target.pty: true` 时走 helper
 - **事件字段补齐**：JSONL 现可带 `toolCallId`、`sessionRevision`；进程树快照、UI 状态仍不完整。
 - **证据**：脱敏终端日志、截图、crash dump；报告里可点开。
 - **指标**：丢失 tool 结果数已按 `tool_started` vs `tool_finished` 统计。丢失消息数仍缺。recovery / resume / orphans / duplicate / takeover / divergence 已在报告里。
-- **SQLite 事件存储**：跨 run 查询与比较；现为 JSONL + `index.jsonl`。
+- **SQLite 事件存储**：跨 run 查询与比较；当前仍为 JSONL + `index.jsonl`。
 
 ## 5. 编排与评测
 

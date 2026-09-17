@@ -173,7 +173,7 @@ agentchaos-helper pty-spawn --cwd DIR -- [argv...]
 | 权限映射 | POSIX mode 权限位 | Windows 只读文件属性 (`FILE_ATTRIBUTE_READONLY`) |
 
 ### 尚未实现
-- 桌面 UI 渲染器无响应（Renderer freeze）、窗口点击自动化（UI Automation）。
+- 完整 generic-desktop adapter、桌面 renderer/webview 内部 crash、窗口点击结果确认。
 - 系统弹窗自动化（macOS TCC 权限、Windows UAC 提权向导）。
 - 宿主机物理休眠/唤醒（Sleep / Wake）。
-- 宿主机物理句柄耗尽、物理内存彻底 OOM、文件系统底层损坏。
+- 宿主机级物理内存彻底 OOM、文件系统底层损坏；隔离工作区的句柄/磁盘耗尽已支持。

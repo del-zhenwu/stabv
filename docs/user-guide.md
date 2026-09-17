@@ -76,6 +76,21 @@ export ZCODE_MODEL=你的模型
 
 从本仓库源码开发时，请使用 `scripts\setup.cmd` 或 `./scripts/setup.sh`。
 
+### 2.1 第一次运行检查清单
+
+1. `node --version` 至少为 22。
+2. 先运行 `agentchaos validate examples/zcode.yaml`，确认 fixture、Agent 和 Helper 能力。
+3. 使用 ZCode 时设置 `ZCODE_API_KEY`、`ZCODE_BASE_URL`、`ZCODE_MODEL`；只测试控制面可运行 `examples/probe/codex-smoke.yaml`。
+4. 运行 `agentchaos run ...`，再用 `agentchaos view --open` 查看报告。
+
+### 2.2 常见问题
+
+- **找不到 fixture**：示例短名只适用于安装包内的 `examples/fixtures`；自己的工程请使用绝对路径。
+- **找不到 Agent**：设置对应的 `*_BIN`，或在 YAML 中填写 `target.executable`。
+- **显示 `degraded`**：实验仍可能运行，但某项能力只能近似验证，例如 Agent 不使用代理或 Helper 没有 PTY。
+- **显示 `unsupported`**：实验不会被误报为通过；请改用支持的 Agent、平台或故障类型。
+- **计划故障没有注入**：查看报告中的 `blockReason`，这通常是登录、网关或 Agent 启动配置问题，而不是可靠性失败。
+
 ---
 
 ## 3. 命令
@@ -125,7 +140,7 @@ agentchaos view --open
 
 `fixture: broken-sum` 是安装包内 `examples/fixtures/broken-sum/` 的短名，运行时复制到隔离工作区。`prompt` 中的 `src/sum.js` 指复制后的文件。针对自有项目时，请写绝对路径，例如 `fixture: /path/to/your/project`。
 
-`inject` 里写类名，会挂上 `examples/profiles/<类>/` 下的全部故障。写成 `inject: { llm: [429, 500], resource: cpu }` 则仅注入所列条目。`together: true` 表示在同一轮中同时注入多类故障。
+`inject` 里写类名，会挂上 `examples/profiles/<类>/` 下的全部故障。默认入口只包含常用的 LLM、资源、文件、Git、网络、进程六类；MCP、桌面、会话、子 Agent、远程、规则和上下文故障需要显式加入。写成 `inject: { llm: [429, 500], resource: cpu }` 则仅注入所列条目。`together: true` 表示在同一轮中同时注入多类故障。
 
 如需逐条声明故障，可使用完整写法：
 
@@ -381,6 +396,8 @@ assertions:
 - **`lostToolResults`**：已开始但未结束的工具调用数量。
 - **`orphanCount`**：结束后仍存活的残留进程数。
 - **`reworkRatio`**：恢复后重复执行先前步骤的比例。
+
+报告的 `risk.capabilities` 会逐项记录 `ok`、`degraded` 或 `unsupported`；它描述实验前置能力，不等同于 Agent 最终通过或失败。
 
 ---
 

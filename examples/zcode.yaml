@@ -7,14 +7,14 @@ metadata:
   name: zcode-default
 spec:
   target:
-    adapter: zcode
+    adapter: zcode             # 目标 Agent；也可替换为 codex/claude/kimi
     prompt: "Fix src/sum.js so `node --test` passes."
-    json: true
-    bypassApprovals: true
-  fixture: broken-sum
-  timeout: 3m
+    json: true                 # 输出结构化事件，便于按 tool/approval 触发故障
+    bypassApprovals: true      # 无人值守实验时自动跳过审批
+  fixture: broken-sum          # 自有工程请改为绝对路径
+  timeout: 3m                  # 单个 case 的最长运行时间
   inject:
-    - llm
+    - llm                      # 默认展开该类别下的全部 profile
     - resource
     - file
     - git
