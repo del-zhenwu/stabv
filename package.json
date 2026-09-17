@@ -17,6 +17,7 @@
     "packages/runner/src",
     "packages/runner/package.json",
     "examples",
+    "schema",
     "helper/src",
     "helper/Cargo.toml",
     "scripts",

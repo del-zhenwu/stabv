@@ -107,6 +107,8 @@ export ZCODE_MODEL=你的模型
 | `agentchaos report <id>` | 查看任务或单条报告。`--json` 输出原始数据 |
 | `agentchaos watch <run-id>` | 跟踪该次运行的 `events.jsonl` |
 | `agentchaos replay <run-id>` | 按已记录的故障再次执行 |
+| `agentchaos compare <report.json> <report.json> ...` | 按故障维度汇总多份报告；`--json` 输出可查询矩阵 |
+| `agentchaos endurance <spec> --repeat N` | 重复运行实验并输出通过率与失败 run ID |
 | `agentchaos recover <run-id>` | 清理该次运行可能残留的进程 |
 
 ---
@@ -142,6 +144,8 @@ agentchaos view --open
 
 `inject` 里写类名，会挂上 `examples/profiles/<类>/` 下的全部故障。默认入口只包含常用的 LLM、资源、文件、Git、网络、进程六类；MCP、桌面、会话、子 Agent、远程、规则和上下文故障需要显式加入。写成 `inject: { llm: [429, 500], resource: cpu }` 则仅注入所列条目。`together: true` 表示在同一轮中同时注入多类故障。
 
+每个 run 会生成 `events.jsonl` 及同目录的 `events.index.json`。后者是无依赖的事件计数索引，可由工具或脚本查询；事件日志不完整时索引会跳过损坏行。`agentchaos view` 使用 SSE 自动刷新运行列表。`replay` 重放记录的 strike 轨迹；库 API 的 `fuzzFaults` 可用固定 seed 产生可复现的时序扰动。显示器热插拔与 DPI 仍明确标记为 unsupported。
+
 如需逐条声明故障，可使用完整写法：
 
 ```yaml
@@ -152,7 +156,7 @@ metadata:
 spec:
   # 1. 目标 Agent 配置
   target:
-    adapter: generic-cli               # codex | claude | kimi | zcode | generic-cli
+    adapter: generic-cli               # codex | claude | kimi | zcode | opencode | cursor | zed | generic-cli
     executable: node                   # 目标程序执行文件
     args:                              # 启动参数列表（避免平台差异）
       - -e

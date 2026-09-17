@@ -12,7 +12,7 @@
 | 希望 `setup` 能够发现该 CLI，YAML 只写 `prompt` / `sandbox` | 在 TypeScript 中增加具名 adapter（对照 Codex、ZCode） |
 | 桌面窗口、点击、UAC | 尚未实现，不属于 CLI adapter |
 
-Claude / Kimi 已按无界面参数拼接（`--print`、JSON、审批绕过、`--resume`）。完整对照仍以 Codex 和 ZCode 为准；新 CLI 先 `generic-cli` 再具名 adapter。
+Claude / Kimi 已按无界面参数拼接（`--print`、JSON、审批绕过、`--resume`）。OpenCode、Cursor CLI 和 Zed 也提供具名的保守无界面 adapter；它们不宣称 session resume 或桌面能力，CLI 版本差异可用 `target.args` 覆盖。完整对照仍以 Codex 和 ZCode 为准；新 CLI 先 `generic-cli` 再具名 adapter。
 
 ## 2. 启动过程
 
@@ -113,12 +113,12 @@ target:
 
 ### 4.2 现有对照
 
-| | Codex | ZCode | Claude | Kimi | `generic-cli` |
+| | Codex | ZCode | Claude | Kimi | OpenCode | Cursor | Zed | `generic-cli` |
 | --- | --- | --- | --- | --- | --- |
-| 发现 | `CODEX_BIN`、ChatGPT.app、Windows 安装目录、`PATH` | `ZCODE_BIN`、`ZCode.app/.../glm/zcode.cjs`、Windows `resources\glm\zcode.cjs`、`PATH` | `CLAUDE_BIN`、npm 全局、`PATH` | `KIMI_BIN`、npm 全局、`PATH` | YAML 写死 |
-| 无 TUI | `codex exec --json --ephemeral` | `--prompt --json --no-color` | `--print --output-format stream-json` | `--print --output-format json` | 你自己的 args |
+| 发现 | `CODEX_BIN`、ChatGPT.app、Windows 安装目录、`PATH` | `ZCODE_BIN`、`ZCode.app/.../glm/zcode.cjs`、Windows `resources\glm\zcode.cjs`、`PATH` | `CLAUDE_BIN`、npm 全局、`PATH` | `KIMI_BIN`、npm 全局、`PATH` | `OPENCODE_BIN` / `opencode` | `CURSOR_BIN` / `cursor-agent`、`cursor` | `ZED_BIN` / `zed` | YAML 写死 |
+| 无 TUI | `codex exec --json --ephemeral` | `--prompt --json --no-color` | `--print --output-format stream-json` | `--print --output-format json` | `run --format json` | `--print --output-format stream-json` | `--agent`（transport-specific） | 你自己的 args |
 | 权限 | `-s` sandbox；`bypassApprovals` | `--mode` plan / build / yolo | `--dangerously-skip-permissions` / `--permission-mode` | `--yolo` | 写在 args 里 |
-| 续跑 | `exec resume --last`（需 `ephemeral: false`） | `--resume` / `--continue` | `--resume` / `--continue` | `--resume` / `--continue` | 无 |
+| 续跑 | `exec resume --last`（需 `ephemeral: false`） | `--resume` / `--continue` | `--resume` / `--continue` | `--resume` / `--continue` | 无 | 无 | 无 | 无 |
 | 登录配置 | 用户本机 Codex 登录 | `ZCODE_API_KEY`、`ZCODE_BASE_URL`、`ZCODE_MODEL`。已经设过 `OPENAI_API_KEY` / `OPENAI_BASE_URL` 的，可以沿用 | 用户本机 Claude 登录 | 用户本机 Kimi 登录 | `target.env` |
 
 LLM 代理（`llm.*` 故障）依赖进程认 `OPENAI_BASE_URL`。Codex / ZCode 的云后端可能忽略它，`validate` 会标 `degraded`。新 CLI 若也不认该变量，同样在 `previewRisk` 里注明。
@@ -139,7 +139,7 @@ target:
     MY_AGENT_BIN_HINT: "..."
 ```
 
-`pty: true` 走 helper `pty-spawn`（Unix PTY / Windows ConPTY）；helper 没有 `pty` 能力则降级为管道并在风险预览里标 `degraded`。
+`pty: true` 走 helper `pty-spawn`（Unix PTY / Windows ConPTY）；helper 没有 `pty` 能力则降级为管道并在风险预览里标 `degraded`。公开 JSON Schema 位于 `schema/agentchaos.dev.v1alpha1.schema.json`；adapter capability contract 可由 `adapterCapabilityContracts()` 读取。显示器热插拔与 DPI 仍明确标为 unsupported。
 
 ## 5. 示例与文档
 
