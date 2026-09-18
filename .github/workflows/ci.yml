@@ -3,6 +3,13 @@ name: ci
 on:
   push:
   pull_request:
+  workflow_dispatch:
+    inputs:
+      run_e2e:
+        description: "Run the real tests/e2e-zcode-user.test.ts suite"
+        required: true
+        default: false
+        type: boolean
 
 jobs:
   test:
@@ -47,7 +54,7 @@ jobs:
 
   e2e:
     needs: test
-    if: ${{ vars.AGENTCHAOS_E2E == 'true' }}
+    if: ${{ vars.AGENTCHAOS_E2E == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_e2e == true) }}
     runs-on: ${{ vars.E2E_RUNNER || 'macos-latest' }}
     timeout-minutes: 45
     steps:
@@ -55,8 +62,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
       - name: Pack
-        run: npm ci && npm run pack
+        run: npm ci && npm run build:helper && npm run pack
       - name: Install packed tarball
         shell: bash
         run: |
@@ -64,7 +72,11 @@ jobs:
           tgz=$(ls agentchaos-*.tgz | head -n 1)
           prefix="${RUNNER_TEMP}/ac-prefix"
           npm install -g --prefix "$prefix" "./$tgz"
-          echo "AGENTCHAOS_BIN=$prefix/bin/agentchaos" >> "$GITHUB_ENV"
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            echo "AGENTCHAOS_BIN=$prefix/agentchaos.cmd" >> "$GITHUB_ENV"
+          else
+            echo "AGENTCHAOS_BIN=$prefix/bin/agentchaos" >> "$GITHUB_ENV"
+          fi
       - name: User-path e2e
         env:
           ZCODE_API_KEY: ${{ secrets.ZCODE_API_KEY }}
