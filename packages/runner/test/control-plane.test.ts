@@ -38,7 +38,7 @@ const root = repoRoot();
 
 describe("evaluation infrastructure", () => {
   it("queries event logs and keeps a compact index", async () => {
-    const dir = await mkdtemp(join(process.cwd(), "event-index-test-"));
+    const dir = await mkdtemp(join(tmpdir(), "agentchaos-event-index-test-"));
     const path = join(dir, "events.jsonl");
     await writeFile(path, [
       JSON.stringify({ ts: 1, run_id: "r", event_id: "1", event: "fault_injected" }),
