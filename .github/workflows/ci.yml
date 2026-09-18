@@ -65,4 +65,7 @@ jobs:
           ZCODE_API_KEY: ${{ secrets.ZCODE_API_KEY }}
           ZCODE_BASE_URL: ${{ secrets.ZCODE_BASE_URL }}
           ZCODE_MODEL: ${{ secrets.ZCODE_MODEL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
         run: npm run test:e2e

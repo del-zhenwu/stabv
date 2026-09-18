@@ -80,7 +80,7 @@ export ZCODE_MODEL=你的模型
 
 1. `node --version` 至少为 22。
 2. 先运行 `agentchaos validate examples/zcode.yaml`，确认 fixture、Agent 和 Helper 能力。
-3. 使用 ZCode 时设置 `ZCODE_API_KEY`、`ZCODE_BASE_URL`、`ZCODE_MODEL`；只测试控制面可运行 `examples/probe/codex-smoke.yaml`。
+3. 使用 ZCode 时设置 `ZCODE_API_KEY`、`ZCODE_BASE_URL`、`ZCODE_MODEL`；也兼容 Actions 常用的 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`；只测试控制面可运行 `examples/probe/codex-smoke.yaml`。
 4. 运行 `agentchaos run ...`，再用 `agentchaos view --open` 查看报告。
 
 ### 2.2 常见问题

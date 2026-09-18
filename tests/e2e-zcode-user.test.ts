@@ -10,9 +10,9 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 loadDotenv(join(repo, ".env"));
 
 const creds = {
-  key: firstEnv(["ZCODE_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"]),
-  baseUrl: firstEnv(["ZCODE_BASE_URL", "ANTHROPIC_BASE_URL", "OPENAI_BASE_URL"]),
-  model: firstEnv(["ZCODE_MODEL", "OPENAI_MODEL"]) ?? "glm-5.3-flash",
+  key: firstEnv(["ZCODE_API_KEY", "LLM_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"]),
+  baseUrl: firstEnv(["ZCODE_BASE_URL", "LLM_BASE_URL", "ANTHROPIC_BASE_URL", "OPENAI_BASE_URL"]),
+  model: firstEnv(["ZCODE_MODEL", "LLM_MODEL", "OPENAI_MODEL"]) ?? "glm-5.3-flash",
 };
 const bin = process.env.AGENTCHAOS_BIN?.trim() || which("agentchaos");
 const cases = bin && creds.key && creds.baseUrl ? listCases(bin) : [];
