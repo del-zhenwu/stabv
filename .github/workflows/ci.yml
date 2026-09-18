@@ -3,13 +3,6 @@ name: ci
 on:
   push:
   pull_request:
-  workflow_dispatch:
-    inputs:
-      run_e2e:
-        description: "Run the real tests/e2e-zcode-user.test.ts suite"
-        required: true
-        default: false
-        type: boolean
 
 jobs:
   test:
@@ -54,7 +47,6 @@ jobs:
 
   e2e:
     needs: test
-    if: ${{ vars.AGENTCHAOS_E2E == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_e2e == true) }}
     runs-on: ${{ vars.E2E_RUNNER || 'macos-latest' }}
     timeout-minutes: 45
     steps:
@@ -79,10 +71,10 @@ jobs:
           fi
       - name: User-path e2e
         env:
-          ZCODE_API_KEY: ${{ secrets.ZCODE_API_KEY }}
-          ZCODE_BASE_URL: ${{ secrets.ZCODE_BASE_URL }}
-          ZCODE_MODEL: ${{ secrets.ZCODE_MODEL }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          ZCODE_API_KEY: ${{ secrets.LLM_API_KEY }}
+          ZCODE_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          ZCODE_MODEL: ${{ secrets.LLM_MODEL }}
         run: npm run test:e2e

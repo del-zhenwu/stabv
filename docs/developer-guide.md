@@ -84,7 +84,7 @@ npm test
 ```
 
 - `npm test` 会自动触发 `cargo build -p agentchaos-helper`，并运行 `packages/runner/test/control-plane.test.ts` 中的全部测试（无外部网络/登录依赖）。
-- 用户路径 e2e 在 `tests/e2e-zcode-user.test.ts`（`node:test`）：先 `npm run pack` 并安装 tgz，再 `npm run test:e2e`。`examples/zcode.yaml` 展开成多条 `it()`，一条故障一条测试，进度看框架的 ✔/✖。不进默认 `npm test`。CI 在控制面测试之后打包、装包，有 Secrets（`ZCODE_API_KEY` / `ZCODE_BASE_URL` / `ZCODE_MODEL`）才跑 e2e。GitHub 托管 runner 默认没有 ZCode，可用仓库变量 `E2E_RUNNER` 指到有 ZCode 的机器。
+- 用户路径 e2e 在 `tests/e2e-zcode-user.test.ts`（`node:test`）：先 `npm run pack` 并安装 tgz，再 `npm run test:e2e`。`examples/zcode.yaml` 展开成多条 `it()`，一条故障一条测试，进度看框架的 ✔/✖。不进默认 `npm test`。CI 每次都会运行 e2e；只需配置已有的 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL` Secrets，workflow 会将它们映射为 ZCode 兼容变量，无需重复配置。GitHub 托管 runner 默认没有 ZCode，可用仓库变量 `E2E_RUNNER` 指到有 ZCode 的机器。
 - 单独调试 Helper：`cargo test -p agentchaos-helper`。
 - 改 `helper/` 后，GitHub Actions `prebuilt-helper` 会编好 `darwin-arm64`、`darwin-x64`、`win32-x64`，校验齐全后写回 `prebuilt/`。缺一份就不能 `npm publish`。用户装包不编 Rust。
 
