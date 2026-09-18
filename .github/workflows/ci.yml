@@ -43,7 +43,7 @@ jobs:
 
   e2e:
     needs: test
-    if: ${{ secrets.ZCODE_API_KEY != '' }}
+    if: ${{ secrets.ZCODE_API_KEY != '' || secrets.LLM_API_KEY != '' }}
     runs-on: ${{ vars.E2E_RUNNER || 'macos-latest' }}
     timeout-minutes: 45
     steps:
