@@ -1692,7 +1692,7 @@ describe("subagent chaos", () => {
     assert.ok(result.report.injected.includes("session.schema_drift"));
   });
 
-  it("desktop native screenshot captures real file and asserts evidence", async () => {
+  (process.platform === "linux" ? it.skip : it)("desktop native screenshot captures real file and asserts evidence", async () => {
     const yaml = [
       "apiVersion: agentchaos.dev/v1alpha1",
       "kind: Experiment",

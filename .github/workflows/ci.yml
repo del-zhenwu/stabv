@@ -22,10 +22,11 @@ jobs:
       - name: Build helper
         run: cargo build -p agentchaos-helper
       - name: Control plane tests
-        run: npm install && npm test
+        run: npm ci && npm test
       - name: Pack
         run: npm run pack
       - name: Install packed tarball
+        if: runner.os != 'Linux'
         shell: bash
         run: |
           set -euo pipefail
@@ -40,10 +41,13 @@ jobs:
           test -e "$bin"
           echo "AGENTCHAOS_BIN=$bin" >> "$GITHUB_ENV"
           "$bin" validate examples/zcode.yaml
+      - name: Validate source CLI on Linux
+        if: runner.os == 'Linux'
+        run: npm run agentchaos -- validate examples/zcode.yaml
 
   e2e:
     needs: test
-    if: ${{ secrets.ZCODE_API_KEY != '' || secrets.LLM_API_KEY != '' }}
+    if: ${{ vars.AGENTCHAOS_E2E == 'true' }}
     runs-on: ${{ vars.E2E_RUNNER || 'macos-latest' }}
     timeout-minutes: 45
     steps:
@@ -52,8 +56,9 @@ jobs:
         with:
           node-version: "22"
       - name: Pack
-        run: npm install && npm run pack
+        run: npm ci && npm run pack
       - name: Install packed tarball
+        shell: bash
         run: |
           set -euo pipefail
           tgz=$(ls agentchaos-*.tgz | head -n 1)
