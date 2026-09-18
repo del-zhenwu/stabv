@@ -2,6 +2,8 @@
 
 本文档列出产品实验与场景编号的对应关系。示例项目均为 `examples/fixtures/broken-sum`（`add()` 实现有误，`node --test` 会失败）。安装后可修改 `agentchaos.yaml`，或运行 `examples/zcode.yaml`。`fixture` 与 `src/sum.js` 的说明见 [示例](../examples/README.md)。
 
+如果你是按问题查实验：进程恢复看 11/22/24，文件并发变化看 16/35，网络恢复看 40，MCP 看 28-30，桌面证据和冻结看 8，资源极限看 18。
+
 `examples/probe/` 使用 Node 替身，无需登录真实 Agent。产品实验应驱动真实工作循环（修改代码、运行测试、操作 Git）。
 
 | 运行方式 | 覆盖场景 |

@@ -1,0 +1,12 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Workload
+metadata:
+  name: opencode
+spec:
+  target:
+    adapter: opencode
+    prompt: "Fix src/sum.js so `node --test` passes. Do not change the tests."
+    json: true
+    bypassApprovals: true
+  fixture: broken-sum
+  timeout: 90s

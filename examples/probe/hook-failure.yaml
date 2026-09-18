@@ -1,0 +1,19 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: hook-failure
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - "setTimeout(() => {}, 1000)"
+  timeout: 5s
+  faults:
+    - type: hook
+      action: fail
+      path: .agentchaos/hooks/pre-commit
+      at: 100ms
+  assertions:
+    - fault_injected:hook.fail

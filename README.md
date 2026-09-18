@@ -11,6 +11,8 @@ AgentChaos 是面向本机 Coding Agent 的故障注入 CLI。
 - **隔离执行：** 实验在 `.agentchaos-runs/` 中运行，不修改当前目录。安装包已包含各平台 helper，只需 Node.js 22+。
 - **本地报告：** `agentchaos view` 查看每次注入的结果。
 
+默认 `inject` 是安全的常用故障集（LLM、资源、文件、Git、网络、进程），MCP、桌面、会话、子 Agent、远程和认知故障需要在 YAML 中显式选择。
+
 ## 快速开始
 
 ### Windows 10+
@@ -45,6 +47,8 @@ spec:
 ```
 
 `inject` 展开为安装包中对应类别的全部故障。换 Agent 时复制该文件并改 `adapter`。`broken-sum` 是自带示例（`src/sum.js` 实现有误）；测自己的工程时把 `fixture` 写成绝对路径。二进制不在 `PATH` 时设置 `ZCODE_BIN`。
+
+第一次遇到具体问题时，先查 [场景→故障映射](docs/scenarios.md)，不必先阅读完整故障目录。
 
 跑 ZCode 前填写三项：API Key、网关地址、模型名。
 

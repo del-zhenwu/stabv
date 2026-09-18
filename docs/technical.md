@@ -29,7 +29,7 @@ Experiment YAML / CLI / CI
 
 ### generic-desktop
 
-完整 adapter 尚未实现。已实现的 `desktop.close_window` 与 `desktop.send_text` 通过 Rust helper 在 macOS 调用 Accessibility/System Events，在 Windows 调用 UI Automation/SendKeys；renderer 状态、输入结果确认和无响应检测仍需要 `generic-desktop`。
+完整 adapter 尚未实现。已实现的 `desktop.close_window`、`desktop.send_text`、`desktop.screenshot` 与 `desktop.freeze` 通过 Rust helper 调用原生系统 API；renderer 状态、输入结果确认、sleep/wake 和 TCC/UAC 交互仍不支持。
 
 ### llm-proxy
 
@@ -126,7 +126,7 @@ Idle -> Planning -> AwaitingApproval -> ExecutingTool
 - `compaction`：interrupt
 - `input`：send / eof
 
-尚未实现（见 [roadmap.md](./roadmap.md)）：桌面 renderer/webview 内部 crash 注入、macOS TCC 授权弹窗 / Windows UAC 交互向导、sleep/wake、显示器/DPI 变化、自动更新打断、完整 ACP host bridge、生产环境真实多机网络分区、无保护的系统级物理 OOM 宕机。
+明确不支持（见 [roadmap.md](./roadmap.md)）：桌面 renderer/webview 内部 crash 注入、macOS TCC 授权弹窗 / Windows UAC 交互向导、sleep/wake、显示器/DPI 变化、自动更新打断、完整 ACP host bridge、生产环境真实多机网络分区、无保护的系统级物理 OOM 宕机。
 
 ## 事件和证据
 

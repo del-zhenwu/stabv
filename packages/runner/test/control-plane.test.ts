@@ -21,17 +21,44 @@ import { parseInject, resolveInjectProfiles } from "../src/inject.ts";
 import { previewRisk } from "../src/capabilities.ts";
 import { runSuite } from "../src/suite.ts";
 import { runWorkflow } from "../src/workflow.ts";
-import { applyResumeArgs, discoverAgents, planLaunch, AGENT_REGISTRY, zcodeCliEnv, isZcodeCaptchaEndpoint, zcodeCliCredentialError } from "../src/adapters.ts";
+import { adapterCapabilityContracts, applyResumeArgs, discoverAgents, planLaunch, AGENT_REGISTRY, zcodeCliEnv, isZcodeCaptchaEndpoint, zcodeCliCredentialError } from "../src/adapters.ts";
 import { runAssertions } from "../src/assertions.ts";
 import { parseFlags, writeStarterSpec } from "../src/cli.ts";
-import { listBundledFixtures, resolveFixture } from "../src/workspace.ts";
+import { assertInsideWorkspace, listBundledFixtures, resolveFixture } from "../src/workspace.ts";
 import { bundledHelperPath, helperExeName, helperPlatformKey, missingPackagedHelpers } from "../src/helper-bin.ts";
 import { existsSync } from "node:fs";
 import { startViewer, collectRuns } from "../src/view.ts";
 import { classifyAgentEvent } from "../src/native-events.ts";
 import { LlmProxy } from "../src/proxy.ts";
+import { EventIndex } from "../src/event-index.ts";
+import { compareReports } from "../src/matrix.ts";
+import { fuzzFaults } from "../src/trajectory.ts";
 
 const root = repoRoot();
+
+describe("evaluation infrastructure", () => {
+  it("queries event logs and keeps a compact index", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agentchaos-event-index-test-"));
+    const path = join(dir, "events.jsonl");
+    await writeFile(path, [
+      JSON.stringify({ ts: 1, run_id: "r", event_id: "1", event: "fault_injected" }),
+      JSON.stringify({ ts: 2, run_id: "r", event_id: "2", event: "run_finished" }),
+    ].join("\n") + "\n");
+    const events = await EventIndex.query(path, { event: "fault_injected" });
+    assert.equal(events.length, 1);
+    assert.equal(events[0]?.run_id, "r");
+  });
+
+  it("compares matrix dimensions and fuzzes deterministically", () => {
+    const matrix = compareReports([
+      { id: "a", name: "x", injected: ["file"], passed: true } as any,
+      { id: "b", name: "x", injected: ["file"], passed: false } as any,
+    ]);
+    assert.equal(matrix.dimensions.file.passRate, 0.5);
+    const faults = [{ kind: "process", action: "kill", atMs: 100 } as any];
+    assert.deepEqual(fuzzFaults(faults, 7, 1), fuzzFaults(faults, 7, 1));
+  });
+});
 
 describe("spec", () => {
   it("parses durations", () => {
@@ -265,6 +292,25 @@ describe("spec", () => {
       workload: "examples/workloads/claude.yaml",
       profile: "examples/profiles/process/kill.yaml",
       fromDir: root,
+    });
+
+    it("plans OpenCode, Cursor, and Zed through named generic-safe adapters", () => {
+      for (const adapter of ["opencode", "cursor", "zed"] as const) {
+        const exp = loadSpecText(
+          `spec:\n  target:\n    adapter: ${adapter}\n    executable: stub-agent\n    prompt: inspect the workspace\n`,
+          `${adapter}.yaml`,
+        );
+        assert.deepEqual(validateExperiment(exp), []);
+        const plan = planLaunch(exp);
+        assert.ok(plan.args.includes("inspect the workspace"));
+        assert.ok(plan.capabilities.includes("cli"));
+      }
+      const contracts = adapterCapabilityContracts();
+      for (const adapter of ["opencode", "cursor", "zed"] as const) {
+        const contract = contracts.find((item) => item.adapter === adapter);
+        assert.equal(contract?.display, "unsupported");
+        assert.equal(contract?.dpi, "unsupported");
+      }
     });
     assert.deepEqual(validateExperiment(claude), []);
     const claudePlan = planLaunch(claude);
@@ -854,6 +900,13 @@ describe("eval report", () => {
 });
 
 describe("cli and viewer robustness", () => {
+  it("rejects workspace escapes using platform-aware relative paths", () => {
+    const work = join(tmpdir(), "agentchaos-workspace");
+    assert.equal(assertInsideWorkspace(work, "src/index.js"), resolve(work, "src/index.js"));
+    assert.throws(() => assertInsideWorkspace(work, "../outside.txt"), /escapes workspace/);
+    assert.throws(() => assertInsideWorkspace(work, "../../outside.txt"), /escapes workspace/);
+  });
+
   it("rejects unknown flags instead of dropping them", () => {
     const ok = parseFlags(["spec.yaml", "--repeat", "3", "--json", "--dry-run", "--continue"]);
     assert.deepEqual(ok.positional, ["spec.yaml"]);
@@ -1639,7 +1692,7 @@ describe("subagent chaos", () => {
     assert.ok(result.report.injected.includes("session.schema_drift"));
   });
 
-  it("desktop native screenshot captures real file and asserts evidence", async () => {
+  (process.platform === "linux" ? it.skip : it)("desktop native screenshot captures real file and asserts evidence", async () => {
     const yaml = [
       "apiVersion: agentchaos.dev/v1alpha1",
       "kind: Experiment",
@@ -1858,6 +1911,9 @@ describe("subagent chaos", () => {
     assert.ok(AGENT_REGISTRY.claude);
     assert.ok(AGENT_REGISTRY.kimi);
     assert.ok(AGENT_REGISTRY.zcode);
+    assert.ok(AGENT_REGISTRY.opencode);
+    assert.ok(AGENT_REGISTRY.cursor);
+    assert.ok(AGENT_REGISTRY.zed);
     assert.ok(AGENT_REGISTRY["generic-cli"]);
 
     assert.equal(AGENT_REGISTRY.codex.envVar, "CODEX_BIN");

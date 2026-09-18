@@ -231,10 +231,25 @@ export class HelperClient {
       const child = spawn(this.bin, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
       let stdout = "";
       let stderr = "";
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        child.kill();
+        reject(new Error(`helper ${args[0]} timed out after 30s${stderr.trim() ? `: ${stderr.trim()}` : ""}`));
+      }, 30_000);
       child.stdout?.on("data", (b) => (stdout += b.toString()));
       child.stderr?.on("data", (b) => (stderr += b.toString()));
-      child.on("error", reject);
+      child.on("error", (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(err);
+      });
       child.on("exit", (code) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
         const parsed = tryJson(stdout);
         if (code === 0 && parsed?.ok !== false) {
           resolvePromise(parsed ?? { ok: true, stdout });

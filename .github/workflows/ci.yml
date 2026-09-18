@@ -22,10 +22,11 @@ jobs:
       - name: Build helper
         run: cargo build -p agentchaos-helper
       - name: Control plane tests
-        run: npm install && npm test
+        run: npm ci && npm test
       - name: Pack
         run: npm run pack
       - name: Install packed tarball
+        if: runner.os != 'Linux'
         shell: bash
         run: |
           set -euo pipefail
@@ -40,10 +41,12 @@ jobs:
           test -e "$bin"
           echo "AGENTCHAOS_BIN=$bin" >> "$GITHUB_ENV"
           "$bin" validate examples/zcode.yaml
+      - name: Validate source CLI on Linux
+        if: runner.os == 'Linux'
+        run: npm run agentchaos -- validate examples/zcode.yaml
 
   e2e:
     needs: test
-    if: ${{ secrets.ZCODE_API_KEY != '' }}
     runs-on: ${{ vars.E2E_RUNNER || 'macos-latest' }}
     timeout-minutes: 45
     steps:
@@ -51,18 +54,27 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
       - name: Pack
-        run: npm install && npm run pack
+        run: npm ci && npm run build:helper && npm run pack
       - name: Install packed tarball
+        shell: bash
         run: |
           set -euo pipefail
           tgz=$(ls agentchaos-*.tgz | head -n 1)
           prefix="${RUNNER_TEMP}/ac-prefix"
           npm install -g --prefix "$prefix" "./$tgz"
-          echo "AGENTCHAOS_BIN=$prefix/bin/agentchaos" >> "$GITHUB_ENV"
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            echo "AGENTCHAOS_BIN=$prefix/agentchaos.cmd" >> "$GITHUB_ENV"
+          else
+            echo "AGENTCHAOS_BIN=$prefix/bin/agentchaos" >> "$GITHUB_ENV"
+          fi
       - name: User-path e2e
         env:
-          ZCODE_API_KEY: ${{ secrets.ZCODE_API_KEY }}
-          ZCODE_BASE_URL: ${{ secrets.ZCODE_BASE_URL }}
-          ZCODE_MODEL: ${{ secrets.ZCODE_MODEL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          ZCODE_API_KEY: ${{ secrets.LLM_API_KEY }}
+          ZCODE_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          ZCODE_MODEL: ${{ secrets.LLM_MODEL }}
         run: npm run test:e2e

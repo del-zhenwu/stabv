@@ -250,6 +250,24 @@ export async function startViewer(opts: ViewOptions = {}): Promise<{ url: string
       res.end(JSON.stringify(collectRuns(dir)));
       return;
     }
+    if (url.pathname === "/api/runs/stream") {
+      res.writeHead(200, {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-cache",
+        connection: "keep-alive",
+      });
+      let previous = "";
+      const push = () => {
+        const payload = JSON.stringify(collectRuns(dir));
+        if (payload === previous) return;
+        previous = payload;
+        res.write(`event: runs\ndata: ${payload}\n\n`);
+      };
+      push();
+      const timer = setInterval(push, 1000);
+      req.on("close", () => clearInterval(timer));
+      return;
+    }
     const taskMatch = url.pathname.match(/^\/tasks\/([^/]+)\/?$/);
     if (taskMatch) {
       const html = renderProductFamilyHtml(dir, decodeURIComponent(taskMatch[1]));

@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentchaos.dev/schema/v1alpha1.json",
+  "title": "AgentChaos v1alpha1",
+  "type": "object",
+  "required": ["apiVersion", "kind", "spec"],
+  "properties": {
+    "apiVersion": { "const": "agentchaos.dev/v1alpha1" },
+    "kind": { "enum": ["Experiment", "Workload", "Suite", "Workflow"] },
+    "metadata": {
+      "type": "object",
+      "properties": { "name": { "type": "string", "minLength": 1 } },
+      "additionalProperties": true
+    },
+    "spec": { "$ref": "#/$defs/experimentSpec" }
+  },
+  "$defs": {
+    "target": {
+      "type": "object",
+      "required": ["adapter"],
+      "properties": {
+        "adapter": {
+          "enum": ["codex", "claude", "kimi", "zcode", "opencode", "cursor", "zed", "generic-cli"]
+        },
+        "command": { "type": "string" },
+        "executable": { "type": "string" },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "prompt": { "type": "string" },
+        "sandbox": { "enum": ["read-only", "workspace-write", "danger-full-access"] },
+        "extraArgs": { "type": "array", "items": { "type": "string" } },
+        "ephemeral": { "type": "boolean" },
+        "json": { "type": "boolean" },
+        "bypassApprovals": { "type": "boolean" },
+        "pty": { "type": "boolean" },
+        "sessionHome": { "type": "string" },
+        "desktop": { "type": "boolean", "description": "Reserved for native desktop faults; display hotplug and DPI are unsupported." }
+      },
+      "additionalProperties": false
+    },
+    "fault": {
+      "type": "object",
+      "required": ["type", "action", "at"],
+      "properties": {
+        "type": { "type": "string" },
+        "action": { "type": "string" },
+        "at": {},
+        "when": { "type": "string" },
+        "duration": {},
+        "path": { "type": "string" },
+        "text": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "experimentSpec": {
+      "type": "object",
+      "required": ["target"],
+      "properties": {
+        "target": { "$ref": "#/$defs/target" },
+        "fixture": { "type": "string" },
+        "workspaceDir": { "type": "string" },
+        "git": { "type": "boolean" },
+        "timeout": {},
+        "mode": { "enum": ["rules", "auto"] },
+        "faults": { "type": "array", "items": { "$ref": "#/$defs/fault" } },
+        "assertions": { "type": "array", "items": { "type": "object" } },
+        "recovery": { "type": "object" },
+        "verify": { "type": "object" },
+        "expected": { "type": "array" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

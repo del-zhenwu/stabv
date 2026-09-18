@@ -1,6 +1,7 @@
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
+import { EventIndex } from "./event-index.ts";
 
 export type ChaosEvent = {
   ts: number;
@@ -20,10 +21,12 @@ export class EventStore {
   readonly events: ChaosEvent[] = [];
   private runId: string;
   private listeners: EventListener[] = [];
+  private readonly index: EventIndex;
 
   constructor(runId: string, path: string) {
     this.runId = runId;
     this.path = path;
+    this.index = new EventIndex(EventIndex.pathFor(path));
   }
 
   on(listener: EventListener): () => void {
@@ -52,6 +55,8 @@ export class EventStore {
     this.events.push(rec);
     await mkdir(dirname(this.path), { recursive: true });
     await appendFile(this.path, JSON.stringify(rec) + "\n");
+    this.index.record(rec);
+    await this.index.flush();
     const summary = detail === undefined ? "" : ` ${safeSummary(detail)}`;
     console.log(`[${event}]${summary}`);
 

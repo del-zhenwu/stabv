@@ -17,6 +17,8 @@ import { runWorkflow } from "./workflow.ts";
 import { dryRunSpec } from "./dryrun.ts";
 import { startViewer, collectRuns, runsRoot, openBrowser } from "./view.ts";
 import { resolveFixture } from "./workspace.ts";
+import { loadReports, compareReports, renderMatrixMarkdown } from "./matrix.ts";
+import { runEndurance } from "./endurance.ts";
 
 function loadDotenvFile(file: string): void {
   if (!existsSync(file)) return;
@@ -75,6 +77,10 @@ async function main(): Promise<number> {
       return await watchCmd(positional[0]);
     case "replay":
       return await replayCmd(positional[0], flags.repeat);
+    case "compare":
+      return await compareCmd(positional, flags);
+    case "endurance":
+      return await enduranceCmd(positional[0], flags);
     case "list":
       return await listCmd();
     case "view":
@@ -107,6 +113,8 @@ function printHelp(): void {
   view [--port 8080] [--open]
   watch <run-id>
   replay <run-id> [--repeat N]
+  compare <report.json> [report.json ...] [--json]
+  endurance <spec> [--repeat N]
   list
   report <id> [--open] [--json]
   recover <run-id>
@@ -621,6 +629,7 @@ async function replayCmd(runId?: string, repeat?: number): Promise<number> {
     console.error("usage: agentchaos replay <run-id>");
     return 2;
   }
+
   const specPath = findRunFile(runId, "experiment.json");
   if (!specPath) {
     console.error(`experiment.json not found for ${runId}; cannot replay`);
@@ -661,6 +670,43 @@ async function replayCmd(runId?: string, repeat?: number): Promise<number> {
     }
   }
   return runCmd(specPath, { repeat });
+}
+
+async function compareCmd(paths: string[], flags: Flags): Promise<number> {
+  if (paths.length < 2) {
+    console.error("usage: agentchaos compare <report.json> <report.json> [... ] [--json]");
+    return 2;
+  }
+  const resolved = paths.map((path) => findRunFile(path, "report.json") ?? resolve(path));
+  try {
+    const matrix = compareReports(await loadReports(resolved));
+    console.log(flags.json ? JSON.stringify(matrix, null, 2) : renderMatrixMarkdown(matrix));
+    return 0;
+  } catch (error) {
+    console.error(formatError(error));
+    return 1;
+  }
+}
+
+async function enduranceCmd(specPath?: string, flags: Flags = {}): Promise<number> {
+  if (!specPath) {
+    console.error("usage: agentchaos endurance <spec> [--repeat N]");
+    return 2;
+  }
+  try {
+    const resolved = resolveUserSpec(specPath);
+    const runnable = await loadRunnable(resolved);
+    if (runnable.kind !== "experiment") {
+      console.error("endurance requires an Experiment spec");
+      return 2;
+    }
+    const report = await runEndurance(runnable.exp, flags.repeat ?? 10, resolved);
+    console.log(JSON.stringify(report, null, 2));
+    return report.failures.length ? 1 : 0;
+  } catch (error) {
+    console.error(formatError(error));
+    return 1;
+  }
 }
 
 async function listCmd(): Promise<number> {

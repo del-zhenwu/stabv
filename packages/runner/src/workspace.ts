@@ -1,6 +1,6 @@
 import { cp, mkdir, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { repoRoot } from "./paths.ts";
 import type { Experiment } from "./spec.ts";
@@ -56,9 +56,10 @@ export function resolveFixture(fixture: string, repo = repoRoot()): string {
 }
 
 export function assertInsideWorkspace(work: string, rel: string): string {
-  const resolved = resolve(work, rel);
   const root = resolve(work);
-  if (resolved !== root && !resolved.startsWith(root + "/") && !resolved.startsWith(root + "\\")) {
+  const resolved = resolve(root, rel);
+  const outside = relative(root, resolved);
+  if (outside === ".." || outside.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) || isAbsolute(outside)) {
     throw new Error(`path escapes workspace: ${rel}`);
   }
   return resolved;

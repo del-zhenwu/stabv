@@ -1,0 +1,19 @@
+apiVersion: agentchaos.dev/v1alpha1
+kind: Experiment
+metadata:
+  name: stdout-huge
+spec:
+  target:
+    adapter: generic-cli
+    executable: node
+    args:
+      - -e
+      - "setTimeout(() => {}, 1000)"
+  timeout: 5s
+  faults:
+    - type: stdout
+      action: huge
+      bytes: 8388608
+  assertions:
+    - fault_injected:stdout.huge
+    - not_timed_out

@@ -20,6 +20,15 @@ export interface AgentDescriptor {
   applyResume(plan: LaunchPlan, target: TargetSpec, sessionId?: string): boolean;
 }
 
+export type AdapterCapabilityContract = {
+  adapter: AdapterName;
+  capabilities: string[];
+  supportsResume: boolean;
+  supportsJsonEvents: boolean;
+  display: "unsupported";
+  dpi: "unsupported";
+};
+
 const DEFAULT_PROMPT = "Inspect the workspace and reply with a one-line summary. Do not modify files.";
 
 /**
@@ -145,6 +154,67 @@ const ZCODE_DESCRIPTOR: AgentDescriptor = {
   },
 };
 
+function namedCliPlan(
+  t: TargetSpec,
+  env: Record<string, string>,
+  descriptor: AgentDescriptor,
+  prefix: string[],
+  jsonArgs: string[],
+): LaunchPlan {
+  if (t.command) return planGeneric(t, env);
+  const executable = resolveAgentExecutable(t, descriptor);
+  if (t.args?.length) return { executable, args: t.args, env, shell: false, capabilities: descriptor.capabilities };
+  const args = [...prefix];
+  if (t.json !== false) args.push(...jsonArgs);
+  if (t.bypassApprovals || t.sandbox === "danger-full-access") args.push("--force");
+  if (t.extraArgs) args.push(...t.extraArgs);
+  args.push(t.prompt ?? descriptor.defaultPrompt ?? DEFAULT_PROMPT);
+  return { executable, args, env, shell: false, capabilities: descriptor.capabilities };
+}
+
+const OPENCODE_DESCRIPTOR: AgentDescriptor = {
+  adapter: "opencode",
+  envVar: "OPENCODE_BIN",
+  canonicalBinNames: ["opencode"],
+  capabilities: ["cli", "json-events"],
+  defaultPrompt: DEFAULT_PROMPT,
+  plan(t, env, descriptor) {
+    return namedCliPlan(t, env, descriptor, ["run"], ["--format", "json"]);
+  },
+  applyResume(): boolean {
+    return false;
+  },
+};
+
+const CURSOR_DESCRIPTOR: AgentDescriptor = {
+  adapter: "cursor",
+  envVar: "CURSOR_BIN",
+  canonicalBinNames: ["cursor-agent", "cursor"],
+  capabilities: ["cli", "json-events"],
+  defaultPrompt: DEFAULT_PROMPT,
+  plan(t, env, descriptor) {
+    return namedCliPlan(t, env, descriptor, ["--print"], ["--output-format", "stream-json"]);
+  },
+  applyResume(): boolean {
+    return false;
+  },
+};
+
+const ZED_DESCRIPTOR: AgentDescriptor = {
+  adapter: "zed",
+  envVar: "ZED_BIN",
+  canonicalBinNames: ["zed"],
+  capabilities: ["cli"],
+  defaultPrompt: DEFAULT_PROMPT,
+  plan(t, env, descriptor) {
+    // Zed's agent protocol is transport-dependent; keep the default conservative.
+    return namedCliPlan(t, env, descriptor, ["--agent"], []);
+  },
+  applyResume(): boolean {
+    return false;
+  },
+};
+
 const GENERIC_DESCRIPTOR: AgentDescriptor = {
   adapter: "generic-cli",
   envVar: "GENERIC_CLI_BIN",
@@ -164,8 +234,22 @@ export const AGENT_REGISTRY: Record<AdapterName, AgentDescriptor> = {
   claude: CLAUDE_DESCRIPTOR,
   kimi: KIMI_DESCRIPTOR,
   zcode: ZCODE_DESCRIPTOR,
+  opencode: OPENCODE_DESCRIPTOR,
+  cursor: CURSOR_DESCRIPTOR,
+  zed: ZED_DESCRIPTOR,
   "generic-cli": GENERIC_DESCRIPTOR,
 };
+
+export function adapterCapabilityContracts(): AdapterCapabilityContract[] {
+  return Object.values(AGENT_REGISTRY).map((descriptor) => ({
+    adapter: descriptor.adapter,
+    capabilities: [...descriptor.capabilities],
+    supportsResume: descriptor.capabilities.includes("session-resume"),
+    supportsJsonEvents: descriptor.capabilities.includes("json-events"),
+    display: "unsupported",
+    dpi: "unsupported",
+  }));
+}
 
 export function planLaunch(exp: Experiment, extraEnv: Record<string, string> = {}): LaunchPlan {
   const t = exp.target;
@@ -297,9 +381,9 @@ export function zcodeCliEnv(opts: { home?: string; env?: NodeJS.ProcessEnv } = {
   const proc = opts.env ?? process.env;
   const fromFiles = readZcodeApiKeyConfig(opts.home ?? proc.HOME ?? proc.USERPROFILE ?? "");
   const out: Record<string, string> = { ...fromFiles };
-  const key = firstEnv(proc, ["ZCODE_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"]);
-  const url = firstEnv(proc, ["ZCODE_BASE_URL", "ANTHROPIC_BASE_URL", "OPENAI_BASE_URL"]);
-  const model = firstEnv(proc, ["ZCODE_MODEL", "OPENAI_MODEL"]);
+  const key = firstEnv(proc, ["ZCODE_API_KEY", "LLM_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"]);
+  const url = firstEnv(proc, ["ZCODE_BASE_URL", "LLM_BASE_URL", "ANTHROPIC_BASE_URL", "OPENAI_BASE_URL"]);
+  const model = firstEnv(proc, ["ZCODE_MODEL", "LLM_MODEL", "OPENAI_MODEL"]);
   if (key) out.ZCODE_API_KEY = key;
   if (url) out.ZCODE_BASE_URL = url;
   if (model) out.ZCODE_MODEL = model;
